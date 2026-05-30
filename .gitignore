@@ -152,3 +152,10 @@ scratch/
 .system_generated/
 *.log
 
+# Manuscripts and publication packages
+BIORXIV_MANUSCRIPT.md
+primerforge_biorxiv_package.zip
+publication_outline.md
+publication_package/
+
+
