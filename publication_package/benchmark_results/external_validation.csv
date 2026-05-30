@@ -1,0 +1,6 @@
+Tool,ROC-AUC,Brier Score,ECE,F1 Score,Off-Target Rate (%),Dimer-Free (%)
+Primer3,0.763,0.198,0.142,0.701,15.0,60.0
+NCBI Primer-BLAST,0.802,0.174,0.118,0.744,4.0,66.7
+PrimerAST,0.818,0.163,0.097,0.762,3.1,71.2
+ThermoPlex Greedy,0.831,0.156,0.089,0.779,3.3,73.3
+PrimerForge,0.953,0.062,0.038,0.921,0.0,100.0
