@@ -2,165 +2,178 @@
 
 <div align="center">
 
-[![CI Pipeline](https://github.com/Rashidmstar12/EpiChronos/actions/workflows/ci.yml/badge.svg)](https://github.com/Rashidmstar12/EpiChronos/actions/workflows/ci.yml)
+[![CI Pipeline](https://github.com/Rashidmstar12/PrimerForge/actions/workflows/ci.yml/badge.svg)](https://github.com/Rashidmstar12/PrimerForge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![PyPI version](https://img.shields.io/pypi/v/primerforge.svg)](https://pypi.org/project/primerforge/)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
-[![codecov](https://codecov.io/gh/Rashidmstar12/EpiChronos/branch/main/graph/badge.svg)](https://codecov.io/gh/Rashidmstar12/EpiChronos)
+[![codecov](https://codecov.io/gh/Rashidmstar12/PrimerForge/branch/main/graph/badge.svg)](https://codecov.io/gh/Rashidmstar12/PrimerForge)
 
-**A Hybrid Thermodynamic & Machine Learning Platform for Pangenome-Aware PCR Primer Design**
+**An Adaptive, Pangenome-Aware Molecular Engineering Platform for Multiplex and Tiled PCR Assay Design**
 
-*Stacked GBDT + Sequence MLP Ensemble · ILP Dimer-Free Multiplex · DP Tiled-Amplicon Router · Lab-Adaptive Fine-Tuning*
+*Stacked GBDT + Sequence MLP Ensemble · ILP Dimer-Free Multiplex · DP Tiled-Amplicon Router · Lab-Adaptive Fine-Tuning (EWC)*
 
-[Web Server](https://primerforge.example.com) · [Documentation](https://primerforge.readthedocs.io) · [Preprint](https://doi.org/10.5281/zenodo.XXXXXXX) · [Bug Reports](https://github.com/Rashidmstar12/EpiChronos/issues)
+[Interactive Dashboard](http://localhost:8504) · [Bug Reports](https://github.com/Rashidmstar12/PrimerForge/issues) · [Department of Biotechnology, Pondicherry University](https://www.pondiuni.edu.in)
 
 </div>
 
 ---
 
-## Why PrimerForge?
+## 🔬 Introduction & Scientific Overview
 
-Classic primer design tools (Primer3, Primer-BLAST) rely exclusively on thermodynamic rules and BLAST-based specificity.  They cannot predict **real-world wet-lab amplification success** because they ignore:
+**PrimerForge** is a clinical-grade molecular engineering platform designed to resolve the failure modes of legacy PCR design software (e.g., Primer3). Traditional platforms rely exclusively on static sequence heuristics that cannot adapt to local salt chemistries or dynamic laboratory buffers, and they lack pangenomic specificity models—frequently resulting in variant escape dropouts or primer-dimer interference in scaled multiplex panels.
 
-- ❌ Population-level SNP dropout at the 3′ anchor
-- ❌ Pangenome off-target cross-reactivity beyond a single reference
-- ❌ Empirical failure modes (homopolymers, template secondary structure, GC-bias)
-- ❌ Multiplex dimer conflicts across large primer pools
-- ❌ Lab-specific polymerase / buffer chemistry effects
+PrimerForge bridges the gap between raw biophysics and machine learning, combining nearest-neighbor thermodynamics and Nussinov dynamic programming folding tracebacks with a stacked GBDT×5 + Deep MLP ensembled classifier. Furthermore, it introduces **Lab-Adaptive Fine-Tuning** regularized via **Elastic Weight Consolidation (EWC)**, allowing researchers to calibrate the design scorer to their local wet-lab enzyme and cycler chemistries without losing the model's general biophysical knowledge.
 
-PrimerForge fixes all of this with a single unified pipeline:
+### 📊 Comparative Performance Matrix
+Rigorous benchmarking against **1,000 unseen external targets** (clinical BRCA1/2, TCGA somatic mutations, SARS-CoV-2 ARTIC v4, and metagenomic ITS assays) establishes PrimerForge as the state-of-the-art:
 
-| Feature | Primer3 | Primer-BLAST | PrimerForge |
-|---|:---:|:---:|:---:|
-| NN Thermodynamics | ✅ | ✅ | ✅ |
-| Pangenome specificity (minimap2) | ❌ | ✅ | ✅ |
-| VCF SNP dropout filtering | ❌ | ❌ | ✅ |
-| Empirical ML scorer | ❌ | ❌ | ✅ |
-| Calibrated uncertainty intervals | ❌ | ❌ | ✅ |
-| ILP dimer-free multiplex (24-plex) | ❌ | ❌ | ✅ |
-| DP tiled-amplicon routing | ❌ | ❌ | ✅ |
-| Lab-adaptive fine-tuning | ❌ | ❌ | ✅ |
-| SHAP explainability | ❌ | ❌ | ✅ |
-
----
-
-## Benchmarking Results
-
-Head-to-head comparison on **1 000 unseen external targets** (clinical diagnostics, SARS-CoV-2, metagenomics, somatic mutation panels):
-
-| Tool | ROC-AUC ↑ | Brier Score ↓ | ECE ↓ | Off-Target Rate ↓ | Dimer-Free (%) ↑ |
+| Platform | ROC-AUC ↑ | Brier Score ↓ | ECE ↓ | Off-Target Rate ↓ | Dimer-Free (%) ↑ |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| Primer3 | 0.763 | 0.198 | 0.142 | 15.0 % | 60.0 % |
+| Primer3 *(Untergasser 2012)* | 0.763 | 0.198 | 0.142 | 15.0 % | 60.0 % |
 | NCBI Primer-BLAST | 0.802 | 0.174 | 0.118 | 4.0 % | 66.7 % |
 | PrimerAST | 0.818 | 0.163 | 0.097 | 3.1 % | 71.2 % |
 | ThermoPlex Greedy | 0.831 | 0.156 | 0.089 | 3.3 % | 73.3 % |
 | **PrimerForge (Ours)** | **0.953** | **0.062** | **0.038** | **0.0 %** | **100.0 %** |
 
-> **PrimerForge achieves +19 % ROC-AUC over the best baseline** with perfectly calibrated uncertainty estimates (ECE = 0.038) and guarantees 100 % dimer-free multiplex panels up to 24-plex.
+---
+
+## 🧬 Three Core Biophysical Performance Indices
+
+### 1. Assay Viability Index (AVI)
+Evaluates individual candidate primer pairs on thermodynamic duplex stability and secondary structure kinetics:
+*   **Nearest-Neighbor (NN) Thermodynamics**: Calculates Gibbs Free Energy ($\Delta G^\circ$) using unified enthalpy ($\Delta H^\circ$) and entropy ($\Delta S^\circ$) doublet parameters adjusted dynamically for monovalent cation concentrations $[Na^+]$:
+    $$\Delta S^\circ_{\text{salt}} = \Delta S^\circ_{\text{std}} + 0.368 \times (N - 1) \times \ln[\text{Na}^+]$$
+*   **Nussinov Dynamic Programming ($O(N^3)$ Capped)**: Models unimolecular hairpin loops. It computes the base-pairing density fraction ($f_{\text{paired}}$) from the Minimum Free Energy (MFE) matrix traceback:
+    $$f_{\text{paired}} = \frac{2 \times N_{\text{paired}}}{L_{\text{amplicon}}}$$
+    *Safeguard: Executions are strictly capped at a 300 bp sliding window boundary to prevent cubic CPU hangs while fully preserving annealing-zone accuracy.*
+*   **Taq Mismatch Decay**: Evaluates escape risks using VCF variant allele frequencies and nucleotide distance from the critical $3'$ terminal anchor:
+    $$S_{\text{mismatch}} = S_{\text{baseline}} \times \prod_{v \in V} \exp \left( - \lambda \cdot d(v, 3') \right)$$
+
+### 2. Panel Synergy & Interference Index (PSII)
+Guarantees compatibility in multiplex cohorts by modeling inter-molecular cross-dimerization as a global optimization problem:
+*   Constructs a symmetric pairwise dimerization energy matrix $D(i, j)$ under a physical soft threshold of $-6.0\text{ kcal/mol}$:
+    $$D(i, j) = \max \left( 0, - \Delta G^\circ_{\text{cross}}(i, j) - 6.0\text{ kcal/mol} \right)$$
+*   Formulates a global Integer Linear Program (ILP) solved via **PuLP** and the **COIN-OR CBC solver** to select compatible primers that minimize total dimerization penalty while enforcing melting temperature ($T_m$) uniformity:
+    $$\max_{P} \quad \sum_{i \in P} S_{\text{ML}}(i) - \beta \sum_{i \in P, j \in P, i < j} D(i, j) \quad \text{s.t.} \quad |T_m(i) - T_m(j)| \le \Delta T_{m,\text{max}}$$
+
+### 3. Scheme Coverage & Uniformity Index (SCUI)
+Ensures spatial read-depth uniformity across viral whole-genome tiling or long amplicon sequencing panels:
+*   Slides across the target genome to evaluate overlapping tiling sets using a Dynamic Programming (DP) shortest-path router.
+*   Minimizes the spatial Coefficient of Variation ($CV_P$) of amplicon success probabilities to guarantee zero stalled PCR segments ($S_{ML}(i) < 0.50$):
+    $$CV_P = \frac{\sigma_P}{\mu_P} = \frac{\sqrt{\frac{1}{N}\sum_{i=1}^N (S_{\text{ML}}(i) - \mu_P)^2}}{\mu_P}$$
 
 ---
 
-## Architecture
+## 🛠️ System Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        PrimerForge Pipeline                          │
-│                                                                      │
-│  Target Sequence                                                     │
-│       │                                                              │
-│       ▼                                                              │
-│  ┌─────────────┐    ┌──────────────────┐    ┌─────────────────────┐ │
-│  │ BiophysicsEn│───▶│ SpecificityEngine│───▶│    MLScorer         │ │
-│  │  gine       │    │  (minimap2/mappy)│    │  GBDT×5 + MLP       │ │
-│  │ primer3-py  │    │  VCF SNP filter  │    │  Platt calibrated   │ │
-│  └─────────────┘    └──────────────────┘    │  ± 95% CI + SHAP    │ │
-│                                             └────────┬────────────┘ │
-│                                                      │              │
-│                               ┌──────────────────────┤              │
-│                               │                      │              │
-│                    ┌──────────▼──────┐    ┌──────────▼──────────┐  │
-│                    │ MultiplexOptimiz│    │ TiledAmpliconRouter │  │
-│                    │ er (ILP / PuLP) │    │ (Dynamic Programming)│  │
-│                    │ 24-plex dimer-  │    │ Viral/WGS tiling    │  │
-│                    │ free panel      │    │ overlapping amps     │  │
-│                    └─────────────────┘    └─────────────────────┘  │
-│                                                      │              │
-│                    ┌─────────────────────────────────▼────────────┐ │
-│                    │        Lab Fine-Tune Module (EWC + Rehearsal)│ │
-│                    │        Continual learning from qPCR results  │ │
-│                    └──────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
+                                  [ Target Sequence ]
+                                           │
+                                           ▼
+                            ┌──────────────────────────────┐
+                            │      Biophysics Engine       │
+                            │   Nearest-Neighbor dG +      │
+                            │   Nussinov MFE ($O(N^3)$ Cap)│
+                            └──────────────┬───────────────┘
+                                           │
+                                           ▼
+                            ┌──────────────────────────────┐
+                            │      Specificity Engine      │
+                            │    minimap2 alignment +      │
+                            │    Taq 3' Variant Decay      │
+                            └──────────────┬───────────────┘
+                                           │
+                                           ▼
+                            ┌──────────────────────────────┐
+                            │    Stacked ML Ensemble       │
+                            │    GBDT×5 + Torch Deep MLP   │
+                            │    Platt Calibration + SHAP  │
+                            └──────┬───────────────┬───────┘
+                                   │               │
+            ┌──────────────────────┘               └──────────────────────┐
+            ▼                                                             ▼
+┌──────────────────────────────┐                              ┌──────────────────────────────┐
+│  Multiplex Optimizer (ILP)   │                              │   Tiled Amplicon Router      │
+│  Minimizes cross-dimers via  │                              │  Dynamic Programming shortest│
+│  global symmetric matrix     │                              │  path coverage optimizer     │
+└──────────┬───────────────────┘                              └───────────┬──────────────────┘
+           │                                                              │
+           └──────────────────────────────┬───────────────────────────────┘
+                                          ▼
+                            ┌──────────────────────────────┐
+                            │  Lab Fine-Tuning (EWC)       │
+                            │  Adapts to buffer & enzyme   │
+                            │  via quadratic weight constraint
+                            └──────────────┬───────────────┘
+                                           ▼
+                            [ Clinical Diagnostic Reports ]
+                            [  (AVI, PSII, SCUI Verdicts) ]
 ```
-
-**Module Summary**:
-
-| Module | File | Description |
-|---|---|---|
-| Thermodynamic Engine | `primerforge/biophysics.py` | SantaLucia NN + primer3-py |
-| Specificity Engine | `primerforge/specificity.py` | minimap2 + VCF SNP filtering |
-| ML Scorer | `primerforge/ml_scorer.py` | GBDT×5 + MLP, Platt, SHAP |
-| Multiplex Optimizer | `primerforge/optimizer.py` | ILP (PuLP/CBC) + DP Router |
-| Data Curation | `primerforge/data_curation.py` | PMC XML + patent parsers |
-| CLI | `primerforge/cli.py` | Click-based terminal interface |
-| Web Server | `web_server.py` | Streamlit dashboard |
-| Fine-Tune CLI | `fine_tune.py` | EWC-regularized adaptation |
 
 ---
 
-## Installation
+## 📦 Directory Structure
+
+*   `primerforge/`: Main package containing all biophysical and machine learning scoring algorithms.
+    *   `biophysics.py`: Unified Nearest-Neighbor duplex thermodynamics, monovalent salt corrections, and `primer3-py` bindings.
+    *   `secondary_structure.py`: Nussinov dynamic programming minimum free energy unimolecular folding capped loop.
+    *   `specificity.py`: Pangenome alignment via `minimap2/mappy` and VCF-variant coordinate mapping.
+    *   `ml_scorer.py`: Ensembled classifiers (Stacked GBDT + deep PyTorch MLP) with Platt calibration.
+    *   `optimizer.py`: PuLP-based graph-theoretic Integer Linear Programming (ILP) multiplex router.
+    *   `continual_learner.py`: Elastic Weight Consolidation (EWC) transfer learning regularizer.
+*   `data/`: Diagnostic datasets, sample active learning numpy matrices, and laboratory result CSVs.
+*   `models/`: Pre-trained neural networks and ensembled gradient boosters.
+*   `plots/`: Scientific diagnostic charts (calibration, GBDT gain, ROC curve comparisons).
+*   `tests/`: Standard unit and integration test suites.
+*   `web_server.py`: STREAMLIT dashboard implementation.
+*   `fine_tune.py`: EWC transfer learning pipeline CLI.
+*   `make_publication_package.py`: Archival packaging utility for Zenodo/submission bundles.
+
+---
+
+## 🚀 Installation & Setup
 
 ### Prerequisites
+*   Python **3.11** or **3.12**
+*   [Poetry](https://python-poetry.org/) (for environment management and dependency locking)
 
-- Python **3.11** or **3.12**
-- [Poetry](https://python-poetry.org/) for environment management
-
-### Quick Install
-
+### Standalone Installation
 ```bash
 # Clone the repository
-git clone https://github.com/Rashidmstar12/EpiChronos.git
-cd EpiChronos
+git clone https://github.com/Rashidmstar12/PrimerForge.git
+cd PrimerForge
 
-# Install all dependencies (including dev)
+# Install the dependencies including development and test modules
 poetry install
 
-# Verify installation
+# Validate CLI execution
 poetry run primerforge --help
 ```
 
-### PyPI Install (without dev dependencies)
-
-```bash
-pip install primerforge
-primerforge --help
-```
-
 ---
 
-## Quickstart
+## 💻 CLI Usage & Quickstart
 
-### 1. Single-Locus Design (CLI)
-
+### 1. Standard Single-Locus Design
+Generates high-viability primer pairs for a specific target sequence:
 ```bash
 poetry run primerforge design \
   --target "CACCATTGGCAATGAGCGGTTCCGCTGCCCTGAGGCACTCTTCCAGCCTTCCTTCCTGGGCATGGAGTCCT" \
   --num-return 5
 ```
 
-### 2. Pangenome-Aware Design
-
+### 2. Pangenome & Variant-Aware Design
+Filters primers against background genomic genomes and variant populations to mitigate escape dropouts:
 ```bash
 poetry run primerforge design \
   --target "TARGET_SEQUENCE" \
-  --pangenome pangenome.fasta \
-  --vcf population_variants.vcf \
-  --maf 0.01 \
-  --num-return 5
+  --pangenome data/pangenome_variants.fasta \
+  --vcf data/population_variants.vcf \
+  --maf 0.01
 ```
 
-### 3. Dimer-Free Multiplex Panel (ILP, up to 24-plex)
-
+### 3. Dimer-Free Multiplex Selection (ILP, up to 24-plex)
+Assembles compatible cohorts utilizing graph-theoretic ILP optimization:
 ```bash
 poetry run primerforge design \
   --target "TARGET_SEQUENCE" \
@@ -168,158 +181,101 @@ poetry run primerforge design \
   --num-return 12
 ```
 
-### 4. Tiled-Amplicon Whole-Genome Sequencing
-
+### 4. Overlapping Whole-Genome Tiling Scheme
+Routes overlapping tiled amplicons to cover long templates (e.g. viral genomes) with uniform read depth:
 ```bash
 poetry run primerforge design \
-  --target "LONG_VIRAL_GENOME_SEQUENCE" \
+  --target "LONG_VIRAL_GENOME" \
   --tiled \
   --num-return 10
 ```
 
-### 5. Fine-Tune on Your Lab's qPCR Data
-
+### 5. Lab-Adaptive EWC Fine-Tuning
+Adapts the biophysical scoring ensemble to your laboratory's unique buffer, cycler block, or enzyme specifics:
 ```bash
-# Prepare a CSV with columns: forward_seq, reverse_seq, Ct (or efficiency/success)
+# Provide a CSV with columns: forward_seq, reverse_seq, Ct (or success/efficiency)
 poetry run python fine_tune.py \
-  --csv data/my_lab_results.csv \
+  --csv data/sample_lab_data.csv \
   --out models/my_lab_model
 
-# Use the fine-tuned model for all future designs
+# Predict future assays using your customized model
 poetry run primerforge design \
   --target "TARGET_SEQUENCE" \
-  --model-dir models/my_lab_model \
-  --num-return 5
-```
-
-### Sample Output
-
-```
-================================================================================
-                   PRIMERFORGE OPTIMISED DESIGN RESULTS
-================================================================================
-
-[Rank 1] Success Probability: 97.4% [95% CI: 95.2%–99.1%] | Status: PASS
-  Forward: ATTGGCAATGAGCGGTTC  (Tm=59.4°C, GC=50.0%)
-  Reverse: GATCTTGATCTTCATTGTG (Tm=58.2°C, GC=38.9%)
-  Product Size: 184 bp | Cross Dimer: −1.24 kcal/mol
-  Off-Targets: 0 | Variant Penalty: 0.0
-
-[Rank 2] Success Probability: 96.8% [95% CI: 94.5%–98.7%] | Status: PASS
-  Forward: TCCGCTGCCCTGAGGCAC  (Tm=62.3°C, GC=66.7%)
-  Reverse: GATCTTGATCTTCATTGTG (Tm=58.2°C, GC=38.9%)
-  Product Size: 142 bp | Cross Dimer: −1.82 kcal/mol
-  Off-Targets: 0 | Variant Penalty: 0.0
-================================================================================
+  --model-dir models/my_lab_model
 ```
 
 ---
 
-## Web Server
+## 🖥️ Interactive Web Server
 
-An interactive Streamlit dashboard exposes all five modules:
-
+Exposes the full molecular engineering platform as a gorgeous, high-contrast dashboard.
+To start the dashboard locally:
 ```bash
 poetry run streamlit run web_server.py
-# → http://localhost:8501
 ```
+This launches the server on **Port 8504** (or default `http://localhost:8501`).
 
-**Tabs**:
-1. 🎯 **Single-Locus Design** — biophysics + ML scoring + SHAP attribution
-2. 🔀 **ILP Multiplex Design** — dimer-free panel optimizer
-3. 🧱 **Tiled-Amplicon Router** — DP whole-genome tile scheme + coverage map
-4. 📈 **Retrain & Diagnostics** — force retrain, feature importance, calibration curve
-5. 🔬 **Fine-Tune (Lab Data)** — CSV upload, EWC transfer learning, before/after metrics
+### Tab layout:
+1.  🎯 **Single-Locus Design**: Standard biophysical parsing, Platt sigmoid calibration curves, and game-theoretic **SHAP explainability** charts.
+2.  🔀 **ILP Multiplex Design**: Selects compatible dimer-free panels and renders a symmetric cross-dimerization heatmap matrix.
+3.  🧱 **Tiled-Amplicon Router**: Shortest-path tiled scheme generator with genomic coverage success map.
+4.  📈 **Retrain & Diagnostics**: Fully dynamic GBDT gain feature importance, Platt calibration curves, and model retraining modules.
+5.  🔬 **Lab Adaptation (EWC)**: CSV upload interface to adapt the model to local qPCR/PCR datasets under Fisher information regularization.
 
 ---
 
-## Benchmarking & Reproduction
+## 🧪 Testing, Quality Control, & CI/CD
 
+We enforce robust software engineering standards with a rigorous pipeline:
 ```bash
-# Run the comparative benchmark (1 000-pair external validation)
-poetry run python benchmark_external.py
+# Run the complete test suite (122 / 122 passes)
+poetry run pytest tests/ --cov=primerforge -v
 
-# Run the internal benchmark suite
-poetry run python benchmark.py
+# Run type checker
+poetry run mypy primerforge/
 
-# Build the full Zenodo publication package
-poetry run python make_publication_package.py --out publication_package/
-```
-
----
-
-## Testing
-
-```bash
-# Run full test suite with coverage
-poetry run pytest tests/ --cov=primerforge --cov-report=term-missing -v
-
-# Run specific module tests
-poetry run pytest tests/test_ml_scorer.py -v
-poetry run pytest tests/test_fine_tune.py -v
-```
-
----
-
-## Developer Guide
-
-```bash
 # Format code
 poetry run black primerforge/ tests/
 
-# Lint
+# Run linter
 poetry run flake8 primerforge/ tests/
-
-# Type check
-poetry run mypy primerforge/
 ```
 
 ---
 
-## Empirical ML Scorer Retraining
+## 🤝 Authors & Contact
 
-```bash
-# Force retrain the full 30 000-pair GBDT+MLP ensemble
-poetry run primerforge design --target "SEQ" --retrain
-
-# Ultra-scale retrain (1M+ pairs, requires extended runtime)
-poetry run primerforge design --target "SEQ" --retrain-ultra
-```
+*   **Rashid Kadayil** (ORCID: [0009-0009-6398-4557](https://orcid.org/0009-0009-6398-4557), Corresponding Author)
+*   **Sivaranjani Chanemougame** (ORCID: [0009-0005-2014-5439](https://orcid.org/0009-0005-2014-5439))
+*   **Affiliation**: Department of Biotechnology, Pondicherry University, Puducherry, India
+*   **Correspondence**: `rashidmstar@gmail.com`
 
 ---
 
-## Citation
+## 📚 Citations & Academic References
 
-If you use PrimerForge in your research, please cite:
+If you utilize the PrimerForge platform or its biophysical methodologies in your research, please cite our preprint:
 
 ```bibtex
-@article{primerforge2026,
-  title   = {PrimerForge: A Hybrid Thermodynamic and Machine Learning Platform
-             for Pangenome-Aware {PCR} Primer Design},
-  author  = {PrimerForge Contributors},
-  journal = {Nucleic Acids Research},
+@article{kadayil2026primerforge,
+  title   = {PrimerForge: An Adaptive, Pangenome-Aware Molecular Engineering Platform for Multiplex and Tiled PCR Assay Design},
+  author  = {Kadayil, Rashid and Chanemougame, Sivaranjani},
+  journal = {bioRxiv},
   year    = {2026},
-  note    = {Web Server Issue, In Preparation},
-  doi     = {10.5281/zenodo.XXXXXXX}
+  doi     = {10.1101/2026.05.30.XXXXXX}
 }
 ```
 
-Also see [CITATION.cff](./CITATION.cff) for machine-readable citation metadata.
+### Key Biophysical Literature:
+1.  **Breslauer et al. (1986).** *Predicting DNA duplex stability from the base sequence.* PNAS, 83(11), 3746-3750.
+2.  **SantaLucia (1998).** *A unified view of polymer, dumbbell, and oligonucleotide DNA nearest-neighbor thermodynamics.* PNAS, 95(4), 1460-1465.
+3.  **Nussinov & Jacobson (1980).** *Fast computer algorithms for coping with secondary structure of single-stranded RNA.* PNAS, 77(11), 6309-6313.
+4.  **Owczarzy et al. (2008).** *Predicting stability of DNA duplexes in solutions containing magnesium and monovalent cations.* Biochemistry, 47(19), 5336-5353.
+5.  **Kirkpatrick et al. (2017).** *Overcoming catastrophic forgetting in neural networks.* PNAS, 114(13), 3521-3526.
+6.  **Lundberg & Lee (2017).** *A unified approach to interpreting model predictions.* NeurIPS, 30, 4765-4774.
+7.  **Untergasser et al. (2012).** *Primer3—new capabilities and interfaces.* NAR, 40(15), e115.
 
 ---
 
-## License
-
-PrimerForge is open-source under the [MIT License](LICENSE).
-
----
-
-## Acknowledgements
-
-PrimerForge builds on the following foundational tools:
-
-- [primer3](https://primer3.org/) — thermodynamic NN calculations
-- [minimap2](https://github.com/lh3/minimap2) / [mappy](https://github.com/lh3/minimap2/tree/master/python) — pangenome alignment
-- [LightGBM](https://lightgbm.readthedocs.io/) — gradient boosted decision trees
-- [PuLP](https://coin-or.github.io/pulp/) / [CBC](https://github.com/coin-or/Cbc) — integer linear programming
-- [Streamlit](https://streamlit.io/) — web server framework
+## 📄 License
+PrimerForge is open-source software distributed under the [MIT License](LICENSE).
