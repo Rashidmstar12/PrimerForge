@@ -165,9 +165,10 @@ CITATION.cff
 
 # Paper/Preprint and Publication Generation Scripts
 make_publication_package.py
-benchmark.py
-benchmark_external.py
-benchmark_rigorous.py
+/benchmark.py
+/benchmark_external.py
+/benchmark_rigorous.py
+!primerforge/benchmark.py
 publication_package/
 
 
