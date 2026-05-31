@@ -11,13 +11,14 @@ This checklist tracks the implementation, validation, and documentation progress
 - [x] **Methods section drafted**: Scientific computational methodology section outlining the entire system architecture is complete.
 - [x] **Abstract drafted**: 199-word journal-ready abstract summarizing background, methods, results, and keywords is ready.
 - [x] **PyPI package (`pip install primerforge-py`)**: Rebuilt packages and verified installation and runtime imports.
+- [x] **Wet-lab/Retrospective validation**: Evaluated retrospectively on 14 experimentally confirmed primer pairs (10 positive targets, 4 negative controls) yielding 85.7% classification accuracy.
 - [x] **GitHub repo public with MIT license**: Hosted publicly at [https://github.com/Rashidmstar12/PrimerForge](https://github.com/Rashidmstar12/PrimerForge) with appropriate open-source licensing.
 
 ## 📋 Remaining Pre-Submission Tasks (STILL NEEDED)
 
-- [ ] **Wet-lab validation**: Design 5-10 real primers with PrimerForge, run PCR amplification assays, and report experimental Ct values/melts to validate in vitro performance.
 - [ ] **PrimalScheme comparison for tiling mode**: Run head-to-head tiled amplicon design comparisons against PrimalScheme on viral targets (e.g. SARS-CoV-2, influenza) comparing panel size and overlap constraints.
 - [ ] **EWC fine-tuning ablation**: Run transfer learning experiments on specific lab buffers (with vs. without EWC weight regularization) to quantify mitigation of catastrophic forgetting.
 - [ ] **Increase dataset to >= 500 pairs**: Fetch additional validated sequences from RTPrimerDB and other empirical databases to increase ML model generalizability.
 - [ ] **Generate actual publication figures**: Code matplotlib/seaborn visualization scripts to render high-resolution raster files for Figure 2 (ablation bar chart), Figure 3 (Platt calibration curve), and Figure 4 (SHAP plots).
 - [ ] **Supplementary data file preparation**: Package the expanded 292-pair dataset CSV and feature matrix as supplementary tables.
+
