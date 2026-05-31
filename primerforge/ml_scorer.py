@@ -1366,19 +1366,21 @@ class MLScorer:
         y_data = []
         databases_used = []
 
+        p_master = "data/master_training_db.csv"
         p1 = "data/primerbank_real.csv"
         p2 = "data/live_ultra_empirical_db.csv"
 
         from primerforge.biophysics import PrimerSequence, PrimerPair
         engine = _get_biophysics_engine()
 
-        # Step 1: Load and parse primerbank_real.csv
-        rows_p1 = []
-        if os.path.exists(p1):
+        all_real_rows = []
+
+        # Step 0: Try loading data/master_training_db.csv FIRST
+        if os.path.exists(p_master):
             try:
-                df1 = pd.read_csv(p1)
-                logger.info(f"Loaded {len(df1)} rows from {p1}")
-                for _, row in df1.iterrows():
+                df_m = pd.read_csv(p_master)
+                logger.info(f"Loaded {len(df_m)} rows from {p_master}")
+                for _, row in df_m.iterrows():
                     f_seq = row.get("forward_seq")
                     r_seq = row.get("reverse_seq")
                     if pd.notna(f_seq) and pd.notna(r_seq):
@@ -1388,65 +1390,103 @@ class MLScorer:
                             success_val = 1.0
                             if "success" in row and pd.notna(row["success"]):
                                 success_val = float(row["success"])
-                            elif "success_idx" in row and pd.notna(row["success_idx"]):
-                                success_val = float(row["success_idx"])
-                            elif "efficiency" in row and pd.notna(row["efficiency"]):
-                                eff = float(row["efficiency"])
-                                success_val = 1.0 if eff > 0.7 else 0.0
-                            elif "specificity" in row and pd.notna(row["specificity"]):
-                                spec = str(row["specificity"]).lower()
-                                success_val = 1.0 if "single_peak" in spec else 0.0
-
-                            rows_p1.append({
+                            
+                            src = str(row.get("source", "master_db")).strip()
+                            all_real_rows.append({
                                 "f_seq": f_seq,
                                 "r_seq": r_seq,
                                 "success": success_val,
-                                "source": "primerbank",
+                                "source": src,
                                 "row": row.to_dict()
                             })
-                if len(rows_p1) > 0:
-                    databases_used.append("PrimerBank")
+                if len(all_real_rows) > 0:
+                    databases_used.append("master_training_db")
             except Exception as e:
-                logger.warning(f"Failed to read/parse {p1}: {e}")
+                logger.warning(f"Failed to read/parse {p_master}: {e}")
 
-        # Step 2: Load and parse live_ultra_empirical_db.csv
-        rows_p2 = []
-        if os.path.exists(p2):
-            try:
-                df2 = pd.read_csv(p2)
-                logger.info(f"Loaded {len(df2)} rows from {p2}")
-                for _, row in df2.iterrows():
-                    f_seq = row.get("forward_seq")
-                    r_seq = row.get("reverse_seq")
-                    if pd.notna(f_seq) and pd.notna(r_seq):
-                        f_seq = str(f_seq).strip()
-                        r_seq = str(r_seq).strip()
-                        if f_seq and r_seq:
-                            success_val = 1.0
-                            if "success" in row and pd.notna(row["success"]):
-                                success_val = float(row["success"])
-                            elif "success_idx" in row and pd.notna(row["success_idx"]):
-                                success_val = float(row["success_idx"])
-                            elif "efficiency" in row and pd.notna(row["efficiency"]):
-                                eff = float(row["efficiency"])
-                                success_val = 1.0 if eff > 0.7 else 0.0
-                            elif "specificity" in row and pd.notna(row["specificity"]):
-                                spec = str(row["specificity"]).lower()
-                                success_val = 1.0 if "single_peak" in spec else 0.0
+        # Fallback to individual databases if master is empty or missing
+        if not all_real_rows:
+            # Step 1: Load and parse primerbank_real.csv
+            rows_p1 = []
+            if os.path.exists(p1):
+                try:
+                    df1 = pd.read_csv(p1)
+                    logger.info(f"Loaded {len(df1)} rows from {p1}")
+                    for _, row in df1.iterrows():
+                        f_seq = row.get("forward_seq")
+                        r_seq = row.get("reverse_seq")
+                        if pd.notna(f_seq) and pd.notna(r_seq):
+                            f_seq = str(f_seq).strip()
+                            r_seq = str(r_seq).strip()
+                            if f_seq and r_seq:
+                                success_val = 1.0
+                                if "success" in row and pd.notna(row["success"]):
+                                    success_val = float(row["success"])
+                                elif "success_idx" in row and pd.notna(row["success_idx"]):
+                                    success_val = float(row["success_idx"])
+                                elif "efficiency" in row and pd.notna(row["efficiency"]):
+                                    eff = float(row["efficiency"])
+                                    success_val = 1.0 if eff > 0.7 else 0.0
+                                elif "specificity" in row and pd.notna(row["specificity"]):
+                                    spec = str(row["specificity"]).lower()
+                                    success_val = 1.0 if "single_peak" in spec else 0.0
 
-                            rows_p2.append({
-                                "f_seq": f_seq,
-                                "r_seq": r_seq,
-                                "success": success_val,
-                                "source": "live_ultra_empirical",
-                                "row": row.to_dict()
-                            })
-                if len(rows_p2) > 0:
-                    databases_used.append("live_ultra_empirical")
-            except Exception as e:
-                logger.warning(f"Failed to read/parse {p2}: {e}")
+                                rows_p1.append({
+                                    "f_seq": f_seq,
+                                    "r_seq": r_seq,
+                                    "success": success_val,
+                                    "source": "primerbank",
+                                    "row": row.to_dict()
+                                })
+                    if len(rows_p1) > 0:
+                        databases_used.append("PrimerBank")
+                except Exception as e:
+                    logger.warning(f"Failed to read/parse {p1}: {e}")
 
-        all_real_rows = rows_p1 + rows_p2
+            # Step 2: Load and parse live_ultra_empirical_db.csv
+            rows_p2 = []
+            if os.path.exists(p2):
+                try:
+                    df2 = pd.read_csv(p2)
+                    logger.info(f"Loaded {len(df2)} rows from {p2}")
+                    for _, row in df2.iterrows():
+                        f_seq = row.get("forward_seq")
+                        r_seq = row.get("reverse_seq")
+                        if pd.notna(f_seq) and pd.notna(r_seq):
+                            f_seq = str(f_seq).strip()
+                            r_seq = str(r_seq).strip()
+                            if f_seq and r_seq:
+                                success_val = 1.0
+                                if "success" in row and pd.notna(row["success"]):
+                                    success_val = float(row["success"])
+                                elif "success_idx" in row and pd.notna(row["success_idx"]):
+                                    success_val = float(row["success_idx"])
+                                elif "efficiency" in row and pd.notna(row["efficiency"]):
+                                    eff = float(row["efficiency"])
+                                    success_val = 1.0 if eff > 0.7 else 0.0
+                                elif "specificity" in row and pd.notna(row["specificity"]):
+                                    spec = str(row["specificity"]).lower()
+                                    success_val = 1.0 if "single_peak" in spec else 0.0
+
+                                rows_p2.append({
+                                    "f_seq": f_seq,
+                                    "r_seq": r_seq,
+                                    "success": success_val,
+                                    "source": "live_ultra_empirical",
+                                    "row": row.to_dict()
+                                })
+                    if len(rows_p2) > 0:
+                        databases_used.append("live_ultra_empirical")
+                except Exception as e:
+                    logger.warning(f"Failed to read/parse {p2}: {e}")
+
+            all_real_rows = rows_p1 + rows_p2
+
+        # Log how many samples from each source were used
+        from collections import Counter
+        source_counts = Counter(item["source"] for item in all_real_rows)
+        logger.info(f"Training data source breakdown: {dict(source_counts)}")
+
 
         if len(all_real_rows) >= 50:
             logger.info(f"Extracting biophysical features for {len(all_real_rows)} real primer pairs...")

@@ -1,0 +1,9 @@
+H	VN:Z:1.0
+S	seg1	CAAATAAG
+S	seg2	GCGCTCAG
+S	seg3	TCCGCTGC
+S	seg_var	GCGCTAAG
+L	seg1	+	seg2	+	0M
+L	seg1	+	seg_var	+	0M
+L	seg2	+	seg3	+	0M
+L	seg_var	+	seg3	+	0M
