@@ -125,7 +125,7 @@ PrimerForge is fully modular and exposes clean, well-documented Python interface
 ### Installing the API Package
 Simply add PrimerForge as a dependency to your project:
 ```bash
-pip install primerforge
+pip install primerforge-py
 ```
 
 ### Core API Classes and Methods

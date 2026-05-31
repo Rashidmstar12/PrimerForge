@@ -136,7 +136,7 @@ Ensures spatial read-depth uniformity across viral whole-genome tiling or long a
 ### 📦 Standard PyPI Installation
 To install the latest release directly from PyPI:
 ```bash
-pip install primerforge
+pip install primerforge-py
 ```
 
 ### 🛠️ Developer / Standalone Installation

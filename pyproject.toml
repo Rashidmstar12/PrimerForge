@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "primerforge"
+name = "primerforge-py"
 version = "0.2.0"
 description = "A Hybrid Thermodynamic and Machine Learning Platform for Pangenome-Aware PCR Primer Design"
 authors = ["PrimerForge Contributors <support@primerforge.org>"]
