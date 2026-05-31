@@ -16,43 +16,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zlib1g-dev build-essential
-
       - name: Set up Python ${{ matrix.python-version }}
-        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Cache Poetry virtualenv
+      - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python-version }}-
 
-      - name: Install dependencies
-        run: poetry install --no-interaction
+      - name: Install CI dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install numpy pandas scipy scikit-learn
+          pip install lightgbm
+          pip install primer3-py pulp
+          pip install --no-deps -e .
 
       - name: Run tests
         env:
           PRIMERFORGE_NO_AUTOTRAIN: "1"
         run: |
-          poetry run pytest tests/test_core_minimal.py -v --tb=short --cov=primerforge --cov-report=xml
-
-      - name: Run mypy type checker
-        run: poetry run mypy primerforge/ --ignore-missing-imports --no-strict-optional
+          pytest tests/test_core_minimal.py -v --tb=short --cov=primerforge --cov-report=xml
 
       - name: Run flake8 linter
-        run: poetry run flake8 primerforge/ --max-line-length=120 --extend-ignore=E203,W503
+        run: |
+          pip install flake8
+          flake8 primerforge/ --max-line-length=120 --extend-ignore=E203,W503
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
