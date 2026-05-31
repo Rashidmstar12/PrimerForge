@@ -165,11 +165,12 @@ def _lgbm_train_predict(
 
     params = dict(
         objective="binary",
-        metric="binary_logloss",
+        metric="auc",
         num_leaves=4,
         n_estimators=50,
         learning_rate=0.1,
         min_child_samples=1,
+        is_unbalance=True,
         verbose=-1,
     )
 
@@ -265,6 +266,19 @@ class AblationBenchmark:
         else:
             # Fallback if dataset is too small
             X_train, X_test, y_train, y_test = X, X, y, y
+
+        # Compute and report class balances
+        train_pos_pct = 100.0 * np.sum(y_train) / len(y_train)
+        train_neg_pct = 100.0 - train_pos_pct
+        test_pos_pct = 100.0 * np.sum(y_test) / len(y_test)
+        test_neg_pct = 100.0 - test_pos_pct
+
+        print(
+            f"[AblationBenchmark] Training Set Class Balance: Positives={train_pos_pct:.2f}% (n={np.sum(y_train)}), Negatives={train_neg_pct:.2f}% (n={len(y_train)-np.sum(y_train)})"
+        )
+        print(
+            f"[AblationBenchmark] Test Set Class Balance: Positives={test_pos_pct:.2f}% (n={np.sum(y_test)}), Negatives={test_neg_pct:.2f}% (n={len(y_test)-np.sum(y_test)})"
+        )
 
         results: List[Dict[str, Any]] = []
 

@@ -34,11 +34,11 @@ Reproduce with: `python -m primerforge.benchmark`
 | Model | ROC-AUC (up) | Brier (down) | F1 (up) | Precision (up) | Recall (up) |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | Biophysics-only (rules) | 0.732 | 0.271 | 0.724 | 0.778 | 0.677 |
-| Single LightGBM (36 feat) | 0.960 | 0.087 | 0.906 | 0.879 | 0.935 |
-| Full ensemble (39 feat) | 0.986 | 0.057 | 0.921 | 0.906 | 0.935 |
-| **Full + EWC (PrimerForge)** | **0.986** | **0.057** | **0.921** | **0.906** | **0.935** |
+| Single LightGBM (36 feat) | 0.955 | 0.093 | 0.871 | 0.871 | 0.871 |
+| Full ensemble (39 feat) | 0.986 | 0.054 | 0.921 | 0.906 | 0.935 |
+| **Full + EWC (PrimerForge)** | **0.986** | **0.054** | **0.921** | **0.906** | **0.935** |
 
-> Evaluation on the balanced expanded empirical dataset with borderline negative controls demonstrates that machine learning scorers yield a high classification performance (0.960–0.986 ROC-AUC) compared to the rigid biophysics rule-based baseline (0.732 ROC-AUC). The rules model achieves high precision but a significantly lower recall (0.677), confirming that traditional biophysical thresholds discard a large fraction (32.3%) of highly viable primers.
+> Evaluation on the balanced expanded empirical dataset with borderline negative controls demonstrates that machine learning scorers yield a high classification performance (0.955–0.986 ROC-AUC) compared to the rigid biophysics rule-based baseline (0.732 ROC-AUC). The rules model achieves high precision but a significantly lower recall (0.677), confirming that traditional biophysical thresholds discard a large fraction (32.3%) of highly viable primers.
 
 
 ### 🔬 Retrospective Validation on Experimentally Confirmed Primers

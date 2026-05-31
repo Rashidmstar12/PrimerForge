@@ -509,7 +509,8 @@ class MLScorer:
                 reg_boosters = self.models
 
             for booster in reg_boosters:
-                raw_predictions.append(float(booster.predict(features)[0]))
+                is_bin = getattr(booster, "objective_type", booster.params.get("objective")) == "binary"
+                raw_predictions.append(float(booster.predict(features, raw_score=is_bin)[0]))
 
             # 2. Optional XGBoost Boosters
             if hasattr(self, "xgb_models") and self.xgb_models:
@@ -592,7 +593,8 @@ class MLScorer:
                 reg_boosters = self.models
 
             for booster in reg_boosters:
-                raw_predictions.append(float(booster.predict(features)[0]))
+                is_bin = getattr(booster, "objective_type", booster.params.get("objective")) == "binary"
+                raw_predictions.append(float(booster.predict(features, raw_score=is_bin)[0]))
 
             # 2. XGBoost Boosters
             if hasattr(self, "xgb_models") and self.xgb_models:
@@ -727,7 +729,8 @@ class MLScorer:
                 reg_boosters = self.models
 
             for booster in reg_boosters:
-                raw_predictions.append(float(booster.predict(features)[0]))
+                is_bin = getattr(booster, "objective_type", booster.params.get("objective")) == "binary"
+                raw_predictions.append(float(booster.predict(features, raw_score=is_bin)[0]))
 
             # 2. XGBoost Boosters
             if hasattr(self, "xgb_models") and self.xgb_models:
@@ -1300,6 +1303,8 @@ class MLScorer:
         )
         df = pipeline.generate_empirical_db(n_samples=30000)
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(df)
+        y_train = np.round(y_train).astype(np.int32)
+        y_test = np.round(y_test).astype(np.int32)
 
         # Append GNN features
         test_chroms = [f"chr{i}" for i in range(19, 23)] + [
@@ -1327,8 +1332,8 @@ class MLScorer:
         test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
 
         params = {
-            "objective": "regression",
-            "metric": "l2",
+            "objective": "binary",
+            "metric": "auc",
             "learning_rate": 0.03,
             "num_leaves": 63,
             "max_depth": 8,
@@ -1336,6 +1341,7 @@ class MLScorer:
             "feature_fraction": 0.8,
             "bagging_fraction": 0.8,
             "bagging_freq": 5,
+            "is_unbalance": True,
             "verbosity": -1,
             "seed": 42,
         }
@@ -1703,14 +1709,15 @@ class MLScorer:
             }
 
         x_arr = np.array(x_data, dtype=np.float32)
-        y_arr = np.array(y_data, dtype=np.float32)
+        y_arr = np.round(np.array(y_data, dtype=np.float32)).astype(np.int32)
 
         train_data = lgb.Dataset(x_arr, label=y_arr)
         params = {
-            "objective": "regression",
-            "metric": "l2",
+            "objective": "binary",
+            "metric": "auc",
             "learning_rate": 0.05,
             "num_leaves": 31,
+            "is_unbalance": True,
             "verbosity": -1,
             "seed": 42,
         }
@@ -1767,6 +1774,8 @@ class MLScorer:
         hybrid_df = pipeline.prepare_hybrid_training_data()
 
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
+        y_train = np.round(y_train).astype(np.int32)
+        y_test = np.round(y_test).astype(np.int32)
 
         # Append GNN features
         test_chroms = [f"chr{i}" for i in range(19, 23)] + [
@@ -1796,8 +1805,8 @@ class MLScorer:
         test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
 
         params = {
-            "objective": "regression",
-            "metric": "l2",
+            "objective": "binary",
+            "metric": "auc",
             "learning_rate": 0.03,
             "num_leaves": 63,
             "max_depth": 8,
@@ -1805,6 +1814,7 @@ class MLScorer:
             "feature_fraction": 0.8,
             "bagging_fraction": 0.8,
             "bagging_freq": 5,
+            "is_unbalance": True,
             "verbosity": -1,
             "seed": 42,
         }
@@ -1976,7 +1986,7 @@ class MLScorer:
                     if idx in [3, 4]:
                         booster.objective_type = "quantile"
                     else:
-                        booster.objective_type = "regression"
+                        booster.objective_type = "binary"
                     loaded_boosters.append(booster)
                 except Exception as e:
                     logger.error(f"Failed to load ultra booster {idx}: {e}")
@@ -2067,6 +2077,8 @@ class MLScorer:
         hybrid_df = pipeline.prepare_hybrid_training_data()
 
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
+        y_train = np.round(y_train).astype(np.int32)
+        y_test = np.round(y_test).astype(np.int32)
 
         # Append GNN features
         test_chroms = [f"chr{i}" for i in range(19, 23)] + [
@@ -2101,8 +2113,8 @@ class MLScorer:
         for idx, seed in enumerate(seeds):
             logger.info(f"Fitting booster {idx + 1}/3 with seed={seed}...")
             params = {
-                "objective": "regression",
-                "metric": "l2",
+                "objective": "binary",
+                "metric": "auc",
                 "learning_rate": 0.03,
                 "num_leaves": 63,
                 "max_depth": 8,
@@ -2110,6 +2122,7 @@ class MLScorer:
                 "feature_fraction": 0.8,
                 "bagging_fraction": 0.8,
                 "bagging_freq": 5,
+                "is_unbalance": True,
                 "verbosity": -1,
                 "seed": seed,
             }
@@ -2231,6 +2244,8 @@ class MLScorer:
 
         # 4. Partition under anti-leakage splitting protocol
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
+        y_train = np.round(y_train).astype(np.int32)
+        y_test = np.round(y_test).astype(np.int32)
 
         # Append GNN features
         test_chroms = [f"chr{i}" for i in range(19, 23)] + [
@@ -2269,8 +2284,8 @@ class MLScorer:
                 f"Fitting ensembled GBDT booster {idx + 1}/3 with seed={seed}..."
             )
             params = {
-                "objective": "regression",
-                "metric": "l2",
+                "objective": "binary",
+                "metric": "auc",
                 "learning_rate": 0.03,
                 "num_leaves": 63,
                 "max_depth": 8,
@@ -2278,6 +2293,7 @@ class MLScorer:
                 "feature_fraction": 0.8,
                 "bagging_fraction": 0.8,
                 "bagging_freq": 5,
+                "is_unbalance": True,
                 "verbosity": -1,
                 "seed": seed,
             }
@@ -2289,7 +2305,7 @@ class MLScorer:
                 valid_sets=[test_data],
                 callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)],
             )
-            booster.objective_type = "regression"
+            booster.objective_type = "binary"
             self.models.append(booster)
 
         # B. Fit quantile regression GBDT boosters for prediction intervals (0.05 and 0.95 percentiles)
@@ -2377,7 +2393,8 @@ class MLScorer:
             if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
         ]
         for booster in reg_boosters:
-            raw_preds.append(booster.predict(X_test))
+            is_bin = getattr(booster, "objective_type", booster.params.get("objective")) == "binary"
+            raw_preds.append(booster.predict(X_test, raw_score=is_bin))
 
         # XGBoost booster
         if self.xgb_models:
@@ -2690,8 +2707,9 @@ class MLScorer:
                 # If we cannot read original alpha, default to 0.05 for index 3, and 0.95 for index 4
                 ft_params["alpha"] = 0.05 if idx == 3 else 0.95
             else:
-                ft_params["objective"] = "regression"
-                ft_params["metric"] = "l2"
+                ft_params["objective"] = "binary"
+                ft_params["metric"] = "auc"
+                ft_params["is_unbalance"] = True
 
             updated_bst = lgb.train(
                 ft_params,
@@ -2699,7 +2717,7 @@ class MLScorer:
                 num_boost_round=100,
             )
             updated_bst.objective_type = (
-                "quantile" if ft_params["objective"] == "quantile" else "regression"
+                "quantile" if ft_params["objective"] == "quantile" else "binary"
             )
             new_models.append(updated_bst)
 
@@ -2843,13 +2861,14 @@ class MLScorer:
         pipeline = DataCurationPipeline()
         df = pipeline.prepare_hybrid_training_data()
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(df)
-
+        y_train = np.round(y_train).astype(np.int32)
         train_data = lgb.Dataset(X_train, label=y_train)
         params = {
-            "objective": "regression",
-            "metric": "l2",
+            "objective": "binary",
+            "metric": "auc",
             "learning_rate": 0.05,
             "num_leaves": 31,
+            "is_unbalance": True,
             "verbosity": -1,
             "seed": 42,
         }
@@ -2859,6 +2878,7 @@ class MLScorer:
             train_data,
             num_boost_round=100,
         )
+        self.model.objective_type = "binary"
         self.models = [self.model]
         self.save()
 
