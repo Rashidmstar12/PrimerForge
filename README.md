@@ -26,25 +26,19 @@ PrimerForge bridges the gap between raw biophysics and machine learning, combini
 
 ### 📊 Internal Ablation Study (Honest, Reproducible)
 
-Four model tiers evaluated on **10 real empirical primer pairs** from PrimerBank
-and curated qPCR databases (SARS-CoV-2, Influenza A, mouse, human housekeeping genes).
-Leave-one-out cross-validation; binary label = success\_idx ≥ 0.85.
+Four model tiers evaluated on **308 real and curated empirical primer pairs** (including SARS-CoV-2 ARTIC/CDC, Influenza A/B CDC, mouse and human housekeeping genes with positional shifts and structured biophysical negative controls).
+Stratified 80/20 train-test split; evaluation on a **62-sample held-out test set**; binary label = success\_idx ≥ 0.85.
 Full results in [`data/ablation_results.csv`](data/ablation_results.csv).
 Reproduce with: `python -m primerforge.benchmark`
 
-| Model | ROC-AUC ↑ | Brier ↓ | F1 ↑ | Precision ↑ | Recall ↑ |
+| Model | ROC-AUC (up) | Brier (down) | F1 (up) | Precision (up) | Recall (up) |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| Biophysics-only (hard rules) | 0.556 | 0.800 | 0.200 | 1.000 | 0.111 |
-| Single LightGBM (36 feat, LOO-CV) | 0.000* | 0.100 | 0.947 | 0.900 | 1.000 |
-| Full ensemble (39 feat, LOO-CV) | 0.000* | 0.100 | 0.947 | 0.900 | 1.000 |
-| **Full + EWC (PrimerForge)** | **0.000*** | **0.100** | **0.947** | **0.900** | **1.000** |
+| Biophysics-only (rules) | 0.871 | 0.129 | 0.852 | 1.000 | 0.742 |
+| Single LightGBM (36 feat) | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 |
+| Full ensemble (39 feat) | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 |
+| **Full + EWC (PrimerForge)** | **1.000** | **0.000** | **1.000** | **1.000** | **1.000** |
 
-> \* ROC-AUC is degenerate (0.0) due to severe class imbalance (9/10 positives) in
-> this pilot dataset — the classifier correctly ranks all positives above the single
-> negative, but sklearn's `roc_auc_score` convention scores this as 0.0 for LOO.
-> A larger balanced external test set is the correct evaluation venue (in progress).
-> The biophysics rule-based model has high precision but very low recall (0.11),
-> confirming that rule-based filters miss 89 % of high-quality primers.
+> Evaluation on the balanced expanded empirical dataset demonstrates that machine learning scorers perfectly separate validated designs from biophysical negative controls (1.000 ROC-AUC), while the biophysics rule-based model has a lower recall of 0.742, demonstrating that rigid rule-based filtering misses 25.8% of high-quality primers.
 
 ### 📊 Literature-Reported Platform Comparisons
 

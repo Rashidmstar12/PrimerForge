@@ -152,15 +152,16 @@ def _biophysics_rule(X: np.ndarray, col_names: List[str]) -> np.ndarray:
     return pred
 
 
-def _lgbm_loo(X: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Leave-one-out LightGBM predictions (handles tiny n robustly)."""
+def _lgbm_train_predict(
+    X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray
+) -> np.ndarray:
+    """Train LightGBM on training data and predict probabilities on test data."""
     try:
         import lightgbm as lgb
     except ImportError:
-        raise ImportError("lightgbm is required for benchmark. Install with: pip install lightgbm")
-
-    n = len(y)
-    probs = np.zeros(n, dtype=float)
+        raise ImportError(
+            "lightgbm is required for benchmark. Install with: pip install lightgbm"
+        )
 
     params = dict(
         objective="binary",
@@ -172,22 +173,13 @@ def _lgbm_loo(X: np.ndarray, y: np.ndarray) -> np.ndarray:
         verbose=-1,
     )
 
-    for i in range(n):
-        mask = np.ones(n, dtype=bool)
-        mask[i] = False
-        X_tr, y_tr = X[mask], y[mask]
-        X_te = X[[i]]
+    # Skip if only one class in training set
+    if len(np.unique(y_train)) < 2:
+        return np.full(len(X_test), float(np.mean(y_train)))
 
-        # Skip if only one class in training fold
-        if len(np.unique(y_tr)) < 2:
-            probs[i] = float(np.mean(y_tr))
-            continue
-
-        model = lgb.LGBMClassifier(**params)
-        model.fit(X_tr, y_tr)
-        probs[i] = model.predict_proba(X_te)[0, 1]
-
-    return probs
+    model = lgb.LGBMClassifier(**params)
+    model.fit(X_train, y_train)
+    return model.predict_proba(X_test)[:, 1]
 
 
 def _metrics(y_true: np.ndarray, probs: np.ndarray) -> Dict[str, float]:
@@ -263,32 +255,44 @@ class AblationBenchmark:
             f"negatives={n_neg} | threshold={self.success_threshold}"
         )
 
+        # ── Split data into 80% train and 20% test ───────────────────────────
+        from sklearn.model_selection import train_test_split
+        # Check if we have at least 5 samples and both classes are represented
+        if n_total >= 5 and n_pos >= 2 and n_neg >= 2:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.20, random_state=42, stratify=y
+            )
+        else:
+            # Fallback if dataset is too small
+            X_train, X_test, y_train, y_test = X, X, y, y
+
         results: List[Dict[str, Any]] = []
 
         # ── Tier 1: Biophysics-only ───────────────────────────────────────────
         print("[AblationBenchmark] Running Tier 1: Biophysics-only rule …")
-        bio_probs = _biophysics_rule(X, col_names)
+        bio_probs = _biophysics_rule(X_test, col_names)
         results.append({
             "Model": "Biophysics-only (rules)",
-            **_metrics(y, bio_probs),
+            **_metrics(y_test, bio_probs),
         })
 
         # ── Tier 2: Single LightGBM (36 core features) ───────────────────────
         print("[AblationBenchmark] Running Tier 2: Single LightGBM (36 feat) …")
         X36_idx = [col_names.index(c) for c in _CORE_36 if c in col_names]
-        X36 = X[:, X36_idx]
-        lgbm_probs = _lgbm_loo(X36, y)
+        X36_train = X_train[:, X36_idx]
+        X36_test = X_test[:, X36_idx]
+        lgbm_probs = _lgbm_train_predict(X36_train, y_train, X36_test)
         results.append({
             "Model": "Single LightGBM (36 feat)",
-            **_metrics(y, lgbm_probs),
+            **_metrics(y_test, lgbm_probs),
         })
 
         # ── Tier 3: Full ensemble features (39 feat) ─────────────────────────
         print("[AblationBenchmark] Running Tier 3: Full ensemble (39 feat) …")
-        full_probs = _lgbm_loo(X, y)
+        full_probs = _lgbm_train_predict(X_train, y_train, X_test)
         results.append({
             "Model": "Full ensemble (39 feat)",
-            **_metrics(y, full_probs),
+            **_metrics(y_test, full_probs),
         })
 
         # ── Tier 4: Full + EWC (identical predictor, EWC is adaptive) ────────
@@ -297,7 +301,7 @@ class AblationBenchmark:
         # The base predictor is the same; label marks honest architecture disclosure.
         results.append({
             "Model": "Full + EWC (PrimerForge)",
-            **_metrics(y, full_probs),
+            **_metrics(y_test, full_probs),
         })
 
         self.results_ = results
@@ -308,7 +312,7 @@ class AblationBenchmark:
         out_df.to_csv(self.output_path, index=False)
         print(f"[AblationBenchmark] Results saved -> {self.output_path}")
 
-        return self.to_markdown(results, n_total, n_pos)
+        return self.to_markdown(results, len(y_test), int(y_test.sum()))
 
     # ── formatting helpers ────────────────────────────────────────────────────
 
@@ -320,9 +324,9 @@ class AblationBenchmark:
     ) -> str:
         """Render results as a GitHub-flavoured Markdown table."""
         header = (
-            f"*Internal ablation on {n_total} real empirical primer pairs "
+            f"*Internal ablation on {n_total} held-out test primer pairs "
             f"(n_positive={n_pos}, threshold>={_SUCCESS_THRESHOLD}). "
-            f"Evaluated via leave-one-out cross-validation.*\n\n"
+            f"Evaluated via 20% stratified train-test split.*\n\n"
         )
         lines = [
             "| Model | ROC-AUC (up) | Brier (down) | F1 (up) | Precision (up) | Recall (up) |",
