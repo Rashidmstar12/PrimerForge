@@ -26,19 +26,20 @@ PrimerForge bridges the gap between raw biophysics and machine learning, combini
 
 ### 📊 Internal Ablation Study (Honest, Reproducible)
 
-Four model tiers evaluated on **308 real and curated empirical primer pairs** (including SARS-CoV-2 ARTIC/CDC, Influenza A/B CDC, mouse and human housekeeping genes with positional shifts and structured biophysical negative controls).
-Stratified 80/20 train-test split; evaluation on a **62-sample held-out test set**; binary label = success\_idx ≥ 0.85.
+Four model tiers evaluated on **292 real and curated empirical primer pairs** (including SARS-CoV-2 ARTIC/CDC, Influenza A/B CDC, mouse and human housekeeping genes with positional shifts and realistic borderline biophysical negative controls).
+Stratified 80/20 train-test split; evaluation on a **59-sample held-out test set**; binary label = success\_idx ≥ 0.85.
 Full results in [`data/ablation_results.csv`](data/ablation_results.csv).
 Reproduce with: `python -m primerforge.benchmark`
 
 | Model | ROC-AUC (up) | Brier (down) | F1 (up) | Precision (up) | Recall (up) |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| Biophysics-only (rules) | 0.871 | 0.129 | 0.852 | 1.000 | 0.742 |
-| Single LightGBM (36 feat) | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 |
-| Full ensemble (39 feat) | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 |
-| **Full + EWC (PrimerForge)** | **1.000** | **0.000** | **1.000** | **1.000** | **1.000** |
+| Biophysics-only (rules) | 0.732 | 0.271 | 0.724 | 0.778 | 0.677 |
+| Single LightGBM (36 feat) | 0.960 | 0.087 | 0.906 | 0.879 | 0.935 |
+| Full ensemble (39 feat) | 0.986 | 0.057 | 0.921 | 0.906 | 0.935 |
+| **Full + EWC (PrimerForge)** | **0.986** | **0.057** | **0.921** | **0.906** | **0.935** |
 
-> Evaluation on the balanced expanded empirical dataset demonstrates that machine learning scorers perfectly separate validated designs from biophysical negative controls (1.000 ROC-AUC), while the biophysics rule-based model has a lower recall of 0.742, demonstrating that rigid rule-based filtering misses 25.8% of high-quality primers.
+> Evaluation on the balanced expanded empirical dataset with borderline negative controls demonstrates that machine learning scorers yield a high classification performance (0.960–0.986 ROC-AUC) compared to the rigid biophysics rule-based baseline (0.732 ROC-AUC). The rules model achieves high precision but a significantly lower recall (0.677), confirming that traditional biophysical thresholds discard a large fraction (32.3%) of highly viable primers.
+
 
 ### 📊 Literature-Reported Platform Comparisons
 

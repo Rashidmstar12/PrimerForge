@@ -1,5 +1,5 @@
 Model,ROC-AUC,Brier,F1,Precision,Recall
-Biophysics-only (rules),0.871,0.129,0.8519,1.0,0.7419
-Single LightGBM (36 feat),1.0,0.0,1.0,1.0,1.0
-Full ensemble (39 feat),1.0,0.0,1.0,1.0,1.0
-Full + EWC (PrimerForge),1.0,0.0,1.0,1.0,1.0
+Biophysics-only (rules),0.7316,0.2712,0.7241,0.7778,0.6774
+Single LightGBM (36 feat),0.9597,0.0872,0.9062,0.8788,0.9355
+Full ensemble (39 feat),0.9862,0.0566,0.9206,0.9062,0.9355
+Full + EWC (PrimerForge),0.9862,0.0566,0.9206,0.9062,0.9355
