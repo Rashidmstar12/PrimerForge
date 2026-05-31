@@ -1,3 +1,9 @@
+import pytest
+try:
+    import mappy
+except ImportError:
+    pytest.skip("mappy not available", allow_module_level=True)
+
 """Unit tests for the SpecificityEngine and VariantAwareFilter modules in PrimerForge."""
 
 import os

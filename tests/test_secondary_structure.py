@@ -1,3 +1,9 @@
+import pytest
+try:
+    import lightgbm
+except ImportError:
+    pytest.skip("lightgbm not available", allow_module_level=True)
+
 """
 Step 2 (Gap-Filling) Quality Control Tests: Nussinov DP Amplicon MFE.
 

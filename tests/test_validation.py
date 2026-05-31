@@ -1,3 +1,15 @@
+import pytest
+try:
+    import lightgbm
+except ImportError:
+    pytest.skip("lightgbm not available", allow_module_level=True)
+
+import pytest
+try:
+    import mappy
+except ImportError:
+    pytest.skip("mappy not available", allow_module_level=True)
+
 """Step 5 Quality Control Tests: Scientific Validation & External Benchmarking.
 
 Verifies that:

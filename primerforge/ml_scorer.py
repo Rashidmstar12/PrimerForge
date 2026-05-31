@@ -16,7 +16,10 @@ import json
 import itertools
 import numpy as np
 import pandas as pd
-import lightgbm as lgb
+try:
+    import lightgbm as lgb
+except ImportError:
+    lgb = None
 from typing import Any, Dict, List, Optional, Tuple
 
 from primerforge.biophysics import PrimerPair, BiophysicsEngine

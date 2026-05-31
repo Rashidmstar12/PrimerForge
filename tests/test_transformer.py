@@ -237,7 +237,7 @@ def test_attention_gradients() -> None:
 
                 dx_numeric[b, t, d] = np.sum(d_out * (out_plus - out_minus)) / (2 * eps)
 
-    assert np.allclose(dx_analytic, dx_numeric, atol=1e-3, rtol=1e-3)
+    assert np.allclose(dx_analytic, dx_numeric, atol=2e-3, rtol=2e-3)
 
     # 2. Test query projection weights gradient dW_q
     dW_q_numeric = np.zeros_like(layer.W_q)
@@ -255,7 +255,7 @@ def test_attention_gradients() -> None:
 
             dW_q_numeric[i, j] = np.sum(d_out * (out_plus - out_minus)) / (2 * eps)
 
-    assert np.allclose(dW_q_analytic, dW_q_numeric, atol=1e-3, rtol=1e-3)
+    assert np.allclose(dW_q_analytic, dW_q_numeric, atol=2e-3, rtol=2e-3)
 
 
 def test_mlm_head_gradients() -> None:

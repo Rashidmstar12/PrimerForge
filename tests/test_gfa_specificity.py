@@ -1,3 +1,9 @@
+import pytest
+try:
+    import mappy
+except ImportError:
+    pytest.skip("mappy not available", allow_module_level=True)
+
 """Unit tests for Phase 3 Pangenome Graph (GFA) Specificity Engine."""
 
 import os

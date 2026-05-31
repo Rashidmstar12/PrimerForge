@@ -1,3 +1,9 @@
+import pytest
+try:
+    import lightgbm
+except ImportError:
+    pytest.skip("lightgbm not available", allow_module_level=True)
+
 """Unit tests for position-specific mismatch thermodynamics and extension penalties in the BiophysicsEngine."""
 
 import pytest

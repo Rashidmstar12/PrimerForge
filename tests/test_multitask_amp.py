@@ -1,3 +1,9 @@
+import pytest
+try:
+    import lightgbm
+except ImportError:
+    pytest.skip("lightgbm not available", allow_module_level=True)
+
 """
 Step 4 Quality Control Tests: Multi-Task Amplification Profiling.
 

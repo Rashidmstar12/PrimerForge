@@ -1,3 +1,9 @@
+import pytest
+try:
+    import lightgbm
+except ImportError:
+    pytest.skip("lightgbm not available", allow_module_level=True)
+
 """
 Step 1 (Gap-Filling) Quality Control Tests: SantaLucia 1998 Nearest-Neighbour ΔG.
 

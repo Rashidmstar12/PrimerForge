@@ -1,3 +1,9 @@
+import pytest
+try:
+    import mappy
+except ImportError:
+    pytest.skip("mappy not available", allow_module_level=True)
+
 """Unit tests for the DataCurationPipeline real-data scraper and hybrid training in PrimerForge."""
 
 import pytest

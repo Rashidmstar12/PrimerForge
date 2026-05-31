@@ -8,10 +8,28 @@ __version__ = "0.1.0"
 __author__ = "PrimerForge Contributors"
 
 from primerforge.biophysics import BiophysicsEngine, PrimerPair, PrimerSequence
-from primerforge.specificity import SpecificityEngine, AlignmentHit, VariantAwareFilter
-from primerforge.ml_scorer import MLScorer
-from primerforge.optimizer import MultiplexOptimizer, TiledAmpliconRouter
-from primerforge.data_curation import DataCurationPipeline
+try:
+    from primerforge.specificity import SpecificityEngine, AlignmentHit, VariantAwareFilter
+except ImportError:
+    SpecificityEngine = None
+    AlignmentHit = None
+    VariantAwareFilter = None
+
+try:
+    from primerforge.ml_scorer import MLScorer
+except ImportError:
+    MLScorer = None
+
+try:
+    from primerforge.optimizer import MultiplexOptimizer, TiledAmpliconRouter
+except ImportError:
+    MultiplexOptimizer = None
+    TiledAmpliconRouter = None
+
+try:
+    from primerforge.data_curation import DataCurationPipeline
+except ImportError:
+    DataCurationPipeline = None
 
 __all__ = [
     "BiophysicsEngine",
