@@ -43,17 +43,17 @@ def test_tiled_router_window_generation(router: TiledAmpliconRouter) -> None:
         reverse=PrimerSequence(mock_seq, 100, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
         product_size=120,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
-    with patch.object(TiledAmpliconRouter, "_generate_tile_candidates", return_value=[mock_pair]):
-        tiles = router.design_tiled_amplicons(
-            long_seq, tile_size=400, overlap=50
-        )
-        
+    with patch.object(
+        TiledAmpliconRouter, "_generate_tile_candidates", return_value=[mock_pair]
+    ):
+        tiles = router.design_tiled_amplicons(long_seq, tile_size=400, overlap=50)
+
         # We have three windows, each should design exactly one tile
         assert len(tiles) == 3
-        
+
         # Check window coordinates project to absolute coordinates
         # Tile 0: win_start=0, forward.start=0, product_size=120 -> abs_start=0, abs_end=120
         assert tiles[0]["abs_start"] == 0
@@ -71,19 +71,27 @@ def test_tiled_router_overlap_constraints(router: TiledAmpliconRouter) -> None:
     # Let's create mock pairs where candidate 0 for window 1 overlaps perfectly,
     # but candidate 1 has a gap (no overlap).
     pair_good = PrimerPair(
-        forward=PrimerSequence("ATGCGATCGATCGATCGATC", 10, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
-        reverse=PrimerSequence("ATGCGATCGATCGATCGATC", 390, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
+        forward=PrimerSequence(
+            "ATGCGATCGATCGATCGATC", 10, 20, 60.0, 50.0, 0.0, 0.0, 0.0
+        ),
+        reverse=PrimerSequence(
+            "ATGCGATCGATCGATCGATC", 390, 20, 60.0, 50.0, 0.0, 0.0, 0.0
+        ),
         product_size=380,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
     pair_bad = PrimerPair(
-        forward=PrimerSequence("ATGCGATCGATCGATCGATC", 300, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
-        reverse=PrimerSequence("ATGCGATCGATCGATCGATC", 390, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
+        forward=PrimerSequence(
+            "ATGCGATCGATCGATCGATC", 300, 20, 60.0, 50.0, 0.0, 0.0, 0.0
+        ),
+        reverse=PrimerSequence(
+            "ATGCGATCGATCGATCGATC", 390, 20, 60.0, 50.0, 0.0, 0.0, 0.0
+        ),
         product_size=90,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
     def side_effect(sub_seq: str, tile_size: int, num_return: int) -> List[PrimerPair]:
@@ -92,10 +100,10 @@ def test_tiled_router_overlap_constraints(router: TiledAmpliconRouter) -> None:
         # For the second window (start at 300), return a good pair and a bad pair
         return [pair_good, pair_bad]
 
-    with patch.object(TiledAmpliconRouter, "_generate_tile_candidates", side_effect=side_effect):
-        tiles = router.design_tiled_amplicons(
-            long_seq, tile_size=400, overlap=50
-        )
+    with patch.object(
+        TiledAmpliconRouter, "_generate_tile_candidates", side_effect=side_effect
+    ):
+        tiles = router.design_tiled_amplicons(long_seq, tile_size=400, overlap=50)
         assert len(tiles) == 2
         # Good tile 0 ends at: 0 + 10 + 380 = 390
         # Good tile 1 starts at: 300 + 10 = 310 -> Overlap = 80bp (Within constraints)
@@ -110,21 +118,24 @@ def test_tiled_router_relaxed_fallback(router: TiledAmpliconRouter) -> None:
 
     # Two amplicons that have no way of overlapping (large gap)
     pair = PrimerPair(
-        forward=PrimerSequence("ATGCGATCGATCGATCGATC", 10, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
-        reverse=PrimerSequence("ATGCGATCGATCGATCGATC", 50, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
+        forward=PrimerSequence(
+            "ATGCGATCGATCGATCGATC", 10, 20, 60.0, 50.0, 0.0, 0.0, 0.0
+        ),
+        reverse=PrimerSequence(
+            "ATGCGATCGATCGATCGATC", 50, 20, 60.0, 50.0, 0.0, 0.0, 0.0
+        ),
         product_size=40,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
-    with patch.object(TiledAmpliconRouter, "_generate_tile_candidates", return_value=[pair]):
+    with patch.object(
+        TiledAmpliconRouter, "_generate_tile_candidates", return_value=[pair]
+    ):
         # Overlap = 50, but amplicons end at 50, and next starts at 300 -> gap of 250bp
         # The strict DP solver will fail because overlap is <= 0.
         # It must trigger the relaxed fallback and successfully return tiles!
-        tiles = router.design_tiled_amplicons(
-            long_seq, tile_size=400, overlap=50
-        )
+        tiles = router.design_tiled_amplicons(long_seq, tile_size=400, overlap=50)
         assert len(tiles) == 2
         assert tiles[0]["abs_start"] == 10
         assert tiles[1]["abs_start"] == 310
-

@@ -29,6 +29,7 @@ from primerforge.biophysics import BiophysicsEngine, PrimerSequence, PrimerPair
 # Shared fixture
 # ---------------------------------------------------------------------------
 
+
 def make_engine(salt_mm: float = 50.0) -> BiophysicsEngine:
     """Returns a BiophysicsEngine with specified monovalent salt concentration."""
     return BiophysicsEngine(salt_monovalent=salt_mm)
@@ -46,24 +47,38 @@ def make_primer_pair(
     f_gc = 100.0 * sum(1 for b in f_seq.upper() if b in "GC") / len(f_seq)
     r_gc = 100.0 * sum(1 for b in r_seq.upper() if b in "GC") / len(r_seq)
     fwd = PrimerSequence(
-        sequence=f_seq, start=0, length=len(f_seq),
-        tm=f_th["tm"], gc_percent=f_gc,
-        hairpin_dg=f_th["hairpin_dg"], homodimer_dg=f_th["homodimer_dg"], penalty=0.0,
+        sequence=f_seq,
+        start=0,
+        length=len(f_seq),
+        tm=f_th["tm"],
+        gc_percent=f_gc,
+        hairpin_dg=f_th["hairpin_dg"],
+        homodimer_dg=f_th["homodimer_dg"],
+        penalty=0.0,
     )
     rev = PrimerSequence(
-        sequence=r_seq, start=product_size, length=len(r_seq),
-        tm=r_th["tm"], gc_percent=r_gc,
-        hairpin_dg=r_th["hairpin_dg"], homodimer_dg=r_th["homodimer_dg"], penalty=0.0,
+        sequence=r_seq,
+        start=product_size,
+        length=len(r_seq),
+        tm=r_th["tm"],
+        gc_percent=r_gc,
+        hairpin_dg=r_th["hairpin_dg"],
+        homodimer_dg=r_th["homodimer_dg"],
+        penalty=0.0,
     )
     return PrimerPair(
-        forward=fwd, reverse=rev, product_size=product_size,
-        cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq), penalty=0.5,
+        forward=fwd,
+        reverse=rev,
+        product_size=product_size,
+        cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq),
+        penalty=0.5,
     )
 
 
 # ---------------------------------------------------------------------------
 # Test 1: GC-rich 3' end more stable than AT-rich 3' end
 # ---------------------------------------------------------------------------
+
 
 def test_gc_richer_terminal_more_stable() -> None:
     """GC-rich 3' end must have more negative ΔG than AT-rich end.
@@ -83,6 +98,7 @@ def test_gc_richer_terminal_more_stable() -> None:
 # ---------------------------------------------------------------------------
 # Test 2: GCGCG terminal ΔG matches SantaLucia 1998 calculation
 # ---------------------------------------------------------------------------
+
 
 def test_gcgcg_terminal_dg_correct() -> None:
     """Verifies ΔG for GCGCG terminal matches manual SantaLucia 1998 calculation.
@@ -105,9 +121,9 @@ def test_gcgcg_terminal_dg_correct() -> None:
     dg = engine.calculate_terminal_dg("ATGCATGCATGCGCGCG", n_terminal=5)
     # Expected from SantaLucia 1998 Table 2 + Owczarzy 2004: approximately -8.22 kcal/mol
     # Allow ±0.5 kcal/mol tolerance for the initiation term interpretation
-    assert -10.0 < dg < -5.0, (
-        f"GCGCG terminal ΔG = {dg:.3f} kcal/mol, expected in [-10, -5] range"
-    )
+    assert (
+        -10.0 < dg < -5.0
+    ), f"GCGCG terminal ΔG = {dg:.3f} kcal/mol, expected in [-10, -5] range"
     # And specifically more negative than -5 (strong GC stacking)
     assert dg < -5.0, f"GCGCG 3' terminal must have ΔG < -5.0, got {dg:.3f}"
 
@@ -115,6 +131,7 @@ def test_gcgcg_terminal_dg_correct() -> None:
 # ---------------------------------------------------------------------------
 # Test 3: AAAAA terminal ΔG matches published range
 # ---------------------------------------------------------------------------
+
 
 def test_aaaaa_terminal_dg_correct() -> None:
     """Verifies ΔG for AAAAA terminal is in published range for AT-rich 3' ends.
@@ -132,19 +149,18 @@ def test_aaaaa_terminal_dg_correct() -> None:
     engine = make_engine(salt_mm=50.0)
     dg = engine.calculate_terminal_dg("GCATGCATGCAAAAA", n_terminal=5)
     # Published range for poly-A 5-mer: approximately -2 to -4 kcal/mol
-    assert -6.0 < dg < 0.0, (
-        f"AAAAA terminal ΔG = {dg:.3f} kcal/mol; expected in [-6, 0]"
-    )
+    assert (
+        -6.0 < dg < 0.0
+    ), f"AAAAA terminal ΔG = {dg:.3f} kcal/mol; expected in [-6, 0]"
     # Must be strictly less negative than GCGCG
     dg_gc = engine.calculate_terminal_dg("ATGCATGCATGCGCGCG", n_terminal=5)
-    assert dg > dg_gc, (
-        f"AAAAA ({dg:.3f}) must be less stable than GCGCG ({dg_gc:.3f})"
-    )
+    assert dg > dg_gc, f"AAAAA ({dg:.3f}) must be less stable than GCGCG ({dg_gc:.3f})"
 
 
 # ---------------------------------------------------------------------------
 # Test 4: Output is always a finite float
 # ---------------------------------------------------------------------------
+
 
 def test_output_is_finite_float() -> None:
     """Verifies that calculate_terminal_dg() always returns a finite float."""
@@ -167,6 +183,7 @@ def test_output_is_finite_float() -> None:
 # Test 5: Higher salt yields less negative ΔG (Owczarzy 2004 sign check)
 # ---------------------------------------------------------------------------
 
+
 def test_salt_correction_direction() -> None:
     """Higher [Na+] → less negative ΔG (Owczarzy 2004 correction is negative for [Na+]<1M).
 
@@ -176,19 +193,26 @@ def test_salt_correction_direction() -> None:
     So: dg(10mM) < dg(50mM) < dg(100mM) < dg(1000mM=1M)
     """
     seq = "ATGCGCGCGCGCG"  # GC-rich for strong stacking signal
-    dg_low  = make_engine(salt_mm=10.0).calculate_terminal_dg(seq)
-    dg_mid  = make_engine(salt_mm=50.0).calculate_terminal_dg(seq)
+    dg_low = make_engine(salt_mm=10.0).calculate_terminal_dg(seq)
+    dg_mid = make_engine(salt_mm=50.0).calculate_terminal_dg(seq)
     dg_high = make_engine(salt_mm=200.0).calculate_terminal_dg(seq)
-    dg_1m   = make_engine(salt_mm=1000.0).calculate_terminal_dg(seq)
+    dg_1m = make_engine(salt_mm=1000.0).calculate_terminal_dg(seq)
 
-    assert dg_low < dg_mid, f"10mM ({dg_low:.3f}) should be more stable than 50mM ({dg_mid:.3f})"
-    assert dg_mid < dg_high, f"50mM ({dg_mid:.3f}) should be more stable than 200mM ({dg_high:.3f})"
-    assert dg_high < dg_1m, f"200mM ({dg_high:.3f}) should be more stable than 1000mM ({dg_1m:.3f})"
+    assert (
+        dg_low < dg_mid
+    ), f"10mM ({dg_low:.3f}) should be more stable than 50mM ({dg_mid:.3f})"
+    assert (
+        dg_mid < dg_high
+    ), f"50mM ({dg_mid:.3f}) should be more stable than 200mM ({dg_high:.3f})"
+    assert (
+        dg_high < dg_1m
+    ), f"200mM ({dg_high:.3f}) should be more stable than 1000mM ({dg_1m:.3f})"
 
 
 # ---------------------------------------------------------------------------
 # Test 6: n_terminal=5 and n_terminal=3 give different values
 # ---------------------------------------------------------------------------
+
 
 def test_n_terminal_length_sensitivity() -> None:
     """Verifies that different n_terminal lengths give different ΔG values."""
@@ -196,18 +220,19 @@ def test_n_terminal_length_sensitivity() -> None:
     seq = "ATGCGCATGCGCGCG"
     dg_5 = engine.calculate_terminal_dg(seq, n_terminal=5)
     dg_3 = engine.calculate_terminal_dg(seq, n_terminal=3)
-    assert dg_5 != dg_3, (
-        f"n_terminal=5 ({dg_5:.3f}) and n_terminal=3 ({dg_3:.3f}) should differ"
-    )
+    assert (
+        dg_5 != dg_3
+    ), f"n_terminal=5 ({dg_5:.3f}) and n_terminal=3 ({dg_3:.3f}) should differ"
     # Longer terminal (more pairs) should be more stable (more negative)
-    assert dg_5 < dg_3, (
-        f"5-terminal ({dg_5:.3f}) should be more stable than 3-terminal ({dg_3:.3f})"
-    )
+    assert (
+        dg_5 < dg_3
+    ), f"5-terminal ({dg_5:.3f}) should be more stable than 3-terminal ({dg_3:.3f})"
 
 
 # ---------------------------------------------------------------------------
 # Test 7: Complement sequences give same ΔG (duplex symmetry)
 # ---------------------------------------------------------------------------
+
 
 def test_complement_symmetry() -> None:
     """Complement of a 3' terminal has the same NN stacking energy (duplex symmetry).
@@ -236,6 +261,7 @@ def test_complement_symmetry() -> None:
 # Test 8: Single-base input returns 0.0 (degenerate case)
 # ---------------------------------------------------------------------------
 
+
 def test_single_base_returns_zero() -> None:
     """Verifies that a single-base sequence returns 0.0 (no dinucleotide pairs possible)."""
     engine = make_engine()
@@ -249,6 +275,7 @@ def test_single_base_returns_zero() -> None:
 # ---------------------------------------------------------------------------
 # Test 9: All 10 SantaLucia dinucleotide ΔG values are individually correct
 # ---------------------------------------------------------------------------
+
 
 def test_all_ten_santaLucia_dinucleotides() -> None:
     """Verifies each of the 10 SantaLucia 1998 dinucleotides gives expected ΔG.
@@ -267,15 +294,15 @@ def test_all_ten_santaLucia_dinucleotides() -> None:
     # GG/CC most stable stack (ΔG = -1.84): should be more negative than AA/TT (-1.0)
     dg_gg = engine.calculate_terminal_dg("ATGCGGGGGG", n_terminal=6)  # 5x GG stacks
     dg_aa = engine.calculate_terminal_dg("ATGCAAAAAA", n_terminal=6)  # 5x AA stacks
-    assert dg_gg < dg_aa, (
-        f"GG stack ({dg_gg:.3f}) must be more stable than AA ({dg_aa:.3f})"
-    )
+    assert (
+        dg_gg < dg_aa
+    ), f"GG stack ({dg_gg:.3f}) must be more stable than AA ({dg_aa:.3f})"
 
     # CG/GC most stable pair (ΔG = -2.17): must beat GG/CC (-1.84)
     dg_cg = engine.calculate_terminal_dg("ATGCGCGCGC", n_terminal=6)  # alternating CG
-    assert dg_cg < dg_gg, (
-        f"CG stack ({dg_cg:.3f}) must be more stable than GG ({dg_gg:.3f})"
-    )
+    assert (
+        dg_cg < dg_gg
+    ), f"CG stack ({dg_cg:.3f}) must be more stable than GG ({dg_gg:.3f})"
 
     # GC/CG most stable individual pair (ΔG = -2.24): competing with CG
     dg_gc = engine.calculate_terminal_dg("ATGCGCGCGC", n_terminal=6)  # similar
@@ -283,9 +310,9 @@ def test_all_ten_santaLucia_dinucleotides() -> None:
 
     # TA/AT least stable stack (ΔG = -0.58): must be less stable than AA (-1.0)
     dg_ta = engine.calculate_terminal_dg("ATGCTATATA", n_terminal=6)  # alternating TA
-    assert dg_ta > dg_aa, (
-        f"TA stack ({dg_ta:.3f}) must be less stable than AA ({dg_aa:.3f})"
-    )
+    assert (
+        dg_ta > dg_aa
+    ), f"TA stack ({dg_ta:.3f}) must be less stable than AA ({dg_aa:.3f})"
 
     # All values must be negative (favorable stacking)
     for seq, name in [
@@ -296,14 +323,15 @@ def test_all_ten_santaLucia_dinucleotides() -> None:
         ("ATGCCACACA", "CA"),
     ]:
         dg = engine.calculate_terminal_dg(seq, n_terminal=6)
-        assert dg < 0.0 or dg < 5.0, (
-            f"{name} stack: ΔG={dg:.3f} should be in reasonable range"
-        )
+        assert (
+            dg < 0.0 or dg < 5.0
+        ), f"{name} stack: ΔG={dg:.3f} should be in reasonable range"
 
 
 # ---------------------------------------------------------------------------
 # Test 10: extract_features() f_3_stability is in real biophysical range
 # ---------------------------------------------------------------------------
+
 
 def test_extract_features_stability_in_real_range() -> None:
     """Verifies extract_features() returns f_3_stability in biophysical range.
@@ -313,6 +341,7 @@ def test_extract_features_stability_in_real_range() -> None:
     This test verifies the real values are present and physically plausible.
     """
     from primerforge.ml_scorer import MLScorer
+
     scorer = MLScorer()
     pair = make_primer_pair(
         f_seq="ATGCATGCATGCGCGCG",  # GC-rich 3' end → very negative ΔG
@@ -328,12 +357,12 @@ def test_extract_features_stability_in_real_range() -> None:
 
     # Must be in real biophysical range [-9.5, +2.5] kcal/mol for 5-mer terminals
     # (GC-rich 5-mers at 50mM NaCl can reach -8 to -9 kcal/mol with salt correction)
-    assert -9.5 <= f_stab <= 2.5, (
-        f"f_3_stability={f_stab:.3f} outside real biophysical range [-9.5, 2.5]"
-    )
-    assert -9.5 <= r_stab <= 2.5, (
-        f"r_3_stability={r_stab:.3f} outside real biophysical range [-9.5, 2.5]"
-    )
+    assert (
+        -9.5 <= f_stab <= 2.5
+    ), f"f_3_stability={f_stab:.3f} outside real biophysical range [-9.5, 2.5]"
+    assert (
+        -9.5 <= r_stab <= 2.5
+    ), f"r_3_stability={r_stab:.3f} outside real biophysical range [-9.5, 2.5]"
 
     # GC-rich forward should be more stable (more negative) than AT-rich reverse
     assert f_stab < r_stab, (

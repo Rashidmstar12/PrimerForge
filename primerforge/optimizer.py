@@ -28,7 +28,7 @@ class MultiplexOptimizer:
         self,
         scored_pairs: List[Dict[str, Any]],
         max_plex: int = 24,
-        delta_g_threshold: float = -4.5
+        delta_g_threshold: float = -4.5,
     ) -> Tuple[List[Dict[str, Any]], float]:
         """Assembles the mathematically optimal multiplex primer panel using ILP.
 
@@ -48,23 +48,35 @@ class MultiplexOptimizer:
         Returns:
             Tuple[List[Dict[str, Any]], float]: (Selected primer set, total objective value)
         """
-        logger.info(f"Initializing ILP optimization for {len(scored_pairs)} candidate pairs...")
+        logger.info(
+            f"Initializing ILP optimization for {len(scored_pairs)} candidate pairs..."
+        )
 
         # Filter out invalid (3' SNP) candidate pairs first
         candidates = [item for item in scored_pairs if item.get("is_valid", True)]
         n_candidates = len(candidates)
-        logger.info(f"Filtered candidate pool: N={n_candidates} (3' SNP dropouts discarded).")
+        logger.info(
+            f"Filtered candidate pool: N={n_candidates} (3' SNP dropouts discarded)."
+        )
 
         if n_candidates == 0:
-            logger.warning("No valid candidate primer pairs available for multiplex optimization.")
+            logger.warning(
+                "No valid candidate primer pairs available for multiplex optimization."
+            )
             return [], 0.0
 
         # Assign unique locus IDs if not present in the target metadata
         for idx, item in enumerate(candidates):
             if "target_id" not in item:
                 pair = item.get("pair")
-                if pair is not None and hasattr(pair, "forward") and pair.forward is not None:
-                    item["target_id"] = pair.forward.sequence[:6]  # Fallback target categorizer
+                if (
+                    pair is not None
+                    and hasattr(pair, "forward")
+                    and pair.forward is not None
+                ):
+                    item["target_id"] = pair.forward.sequence[
+                        :6
+                    ]  # Fallback target categorizer
                 else:
                     item["target_id"] = f"locus_{idx}"
 
@@ -75,10 +87,18 @@ class MultiplexOptimizer:
         x = [pulp.LpVariable(f"x_{i}", cat=pulp.LpBinary) for i in range(n_candidates)]
 
         # 1. Objective function: Maximize total predicted success probability
-        prob += pulp.lpSum(candidates[i]["predicted_success"] * x[i] for i in range(n_candidates)), "Total_Success"
+        prob += (
+            pulp.lpSum(
+                candidates[i]["predicted_success"] * x[i] for i in range(n_candidates)
+            ),
+            "Total_Success",
+        )
 
         # 2. Constraint: Limit total number of selected amplicons to max_plex
-        prob += pulp.lpSum(x[i] for i in range(n_candidates)) <= max_plex, "Max_Plex_Constraint"
+        prob += (
+            pulp.lpSum(x[i] for i in range(n_candidates)) <= max_plex,
+            "Max_Plex_Constraint",
+        )
 
         # 3. Locus Constraint: At most one primer pair selected per target locus
         loci_groups: Dict[str, List[int]] = {}
@@ -89,7 +109,10 @@ class MultiplexOptimizer:
             loci_groups[target_id].append(i)
 
         for target_id, indices in loci_groups.items():
-            prob += pulp.lpSum(x[i] for i in indices) <= 1, f"Locus_Constraint_{target_id}"
+            prob += (
+                pulp.lpSum(x[i] for i in indices) <= 1,
+                f"Locus_Constraint_{target_id}",
+            )
 
         # 4. Cross-Dimerization Constraints: x_i + x_j <= 1 for interacting pairs
         # We pre-compute pairwise cross-hybridization between all candidates across different loci
@@ -98,7 +121,7 @@ class MultiplexOptimizer:
 
         for i in range(n_candidates):
             pair_i = candidates[i]["pair"]
-            
+
             for j in range(i + 1, n_candidates):
                 # Do not check conflicts within the same locus (already constrained by Locus Constraint)
                 if candidates[i]["target_id"] == candidates[j]["target_id"]:
@@ -111,10 +134,18 @@ class MultiplexOptimizer:
                 # 2. Forward_i + Reverse_j
                 # 3. Reverse_i + Forward_j
                 # 4. Reverse_i + Reverse_j
-                dg_ff = self.biophys.calculate_heterodimer_dg(pair_i.forward.sequence, pair_j.forward.sequence)
-                dg_fr = self.biophys.calculate_heterodimer_dg(pair_i.forward.sequence, pair_j.reverse.sequence)
-                dg_rf = self.biophys.calculate_heterodimer_dg(pair_i.reverse.sequence, pair_j.forward.sequence)
-                dg_rr = self.biophys.calculate_heterodimer_dg(pair_i.reverse.sequence, pair_j.reverse.sequence)
+                dg_ff = self.biophys.calculate_heterodimer_dg(
+                    pair_i.forward.sequence, pair_j.forward.sequence
+                )
+                dg_fr = self.biophys.calculate_heterodimer_dg(
+                    pair_i.forward.sequence, pair_j.reverse.sequence
+                )
+                dg_rf = self.biophys.calculate_heterodimer_dg(
+                    pair_i.reverse.sequence, pair_j.forward.sequence
+                )
+                dg_rr = self.biophys.calculate_heterodimer_dg(
+                    pair_i.reverse.sequence, pair_j.reverse.sequence
+                )
 
                 min_dg = min(dg_ff, dg_fr, dg_rf, dg_rr)
 
@@ -123,7 +154,9 @@ class MultiplexOptimizer:
                     prob += x[i] + x[j] <= 1, f"Conflict_{i}_{j}"
                     conflict_edges += 1
 
-        logger.info(f"ILP graph built with {n_candidates} nodes and {conflict_edges} conflict edges.")
+        logger.info(
+            f"ILP graph built with {n_candidates} nodes and {conflict_edges} conflict edges."
+        )
 
         # 5. Solve the Integer Linear Programming problem
         try:
@@ -131,12 +164,16 @@ class MultiplexOptimizer:
             solver = pulp.PULP_CBC_CMD(msg=False)
             status = prob.solve(solver)
         except Exception as e:
-            logger.error(f"PuLP ILP Solver failed: {e}. Falling back to a greedy heuristic solver.")
+            logger.error(
+                f"PuLP ILP Solver failed: {e}. Falling back to a greedy heuristic solver."
+            )
             return self._solve_greedy_fallback(candidates, max_plex, delta_g_threshold)
 
         # Check solver status
         if status != pulp.LpStatusOptimal:
-            logger.warning("PuLP failed to find an mathematically optimal solution. Running greedy fallback.")
+            logger.warning(
+                "PuLP failed to find an mathematically optimal solution. Running greedy fallback."
+            )
             return self._solve_greedy_fallback(candidates, max_plex, delta_g_threshold)
 
         # Extract selected candidates
@@ -145,15 +182,16 @@ class MultiplexOptimizer:
             if x[i].varValue is not None and x[i].varValue > 0.5:
                 selected_set.append(candidates[i])
 
-        objective_value = float(pulp.value(prob.objective)) if pulp.value(prob.objective) else 0.0
-        logger.info(f"ILP optimization completed successfully. Selected {len(selected_set)} compatible primer pairs.")
+        objective_value = (
+            float(pulp.value(prob.objective)) if pulp.value(prob.objective) else 0.0
+        )
+        logger.info(
+            f"ILP optimization completed successfully. Selected {len(selected_set)} compatible primer pairs."
+        )
         return selected_set, objective_value
 
     def _solve_greedy_fallback(
-        self,
-        candidates: List[Dict[str, Any]],
-        max_plex: int,
-        delta_g_threshold: float
+        self, candidates: List[Dict[str, Any]], max_plex: int, delta_g_threshold: float
     ) -> Tuple[List[Dict[str, Any]], float]:
         """Greedy heuristic solver fallback in case the C-compiler/pulp command is blocked."""
         logger.info("Running greedy heuristic multiplex selection...")
@@ -165,7 +203,7 @@ class MultiplexOptimizer:
         for item in sorted_candidates:
             if len(selected) >= max_plex:
                 break
-            
+
             target_id = item["target_id"]
             if target_id in selected_loci:
                 continue
@@ -176,10 +214,18 @@ class MultiplexOptimizer:
             # Check conflicts against already selected pairs
             for sel in selected:
                 sel_pair = sel["pair"]
-                dg_ff = self.biophys.calculate_heterodimer_dg(pair.forward.sequence, sel_pair.forward.sequence)
-                dg_fr = self.biophys.calculate_heterodimer_dg(pair.forward.sequence, sel_pair.reverse.sequence)
-                dg_rf = self.biophys.calculate_heterodimer_dg(pair.reverse.sequence, sel_pair.forward.sequence)
-                dg_rr = self.biophys.calculate_heterodimer_dg(pair.reverse.sequence, sel_pair.reverse.sequence)
+                dg_ff = self.biophys.calculate_heterodimer_dg(
+                    pair.forward.sequence, sel_pair.forward.sequence
+                )
+                dg_fr = self.biophys.calculate_heterodimer_dg(
+                    pair.forward.sequence, sel_pair.reverse.sequence
+                )
+                dg_rf = self.biophys.calculate_heterodimer_dg(
+                    pair.reverse.sequence, sel_pair.forward.sequence
+                )
+                dg_rr = self.biophys.calculate_heterodimer_dg(
+                    pair.reverse.sequence, sel_pair.reverse.sequence
+                )
 
                 if min(dg_ff, dg_fr, dg_rf, dg_rr) < delta_g_threshold:
                     conflict = True
@@ -204,7 +250,7 @@ class TiledAmpliconRouter:
     def __init__(
         self,
         biophys_engine: BiophysicsEngine | None = None,
-        ml_scorer: MLScorer | None = None
+        ml_scorer: MLScorer | None = None,
     ) -> None:
         """Initializes the TiledAmpliconRouter.
 
@@ -221,7 +267,7 @@ class TiledAmpliconRouter:
         tile_size: int = 400,
         overlap: int = 50,
         max_tiles: int | None = None,
-        delta_g_threshold: float = -4.5
+        delta_g_threshold: float = -4.5,
     ) -> List[Dict[str, Any]]:
         """Computes the mathematically optimal tiling path of overlapping amplicons using DP.
 
@@ -239,7 +285,9 @@ class TiledAmpliconRouter:
         Returns:
             List[Dict[str, Any]]: Chronologically sorted list of selected optimal tiles.
         """
-        logger.info(f"Initializing Dynamic Programming Tiled-Amplicon design for sequence of length {len(target_sequence)}...")
+        logger.info(
+            f"Initializing Dynamic Programming Tiled-Amplicon design for sequence of length {len(target_sequence)}..."
+        )
         L = len(target_sequence)
 
         # 1. Define sliding window target regions spanning the sequence
@@ -261,7 +309,9 @@ class TiledAmpliconRouter:
         if max_tiles is not None:
             windows = windows[:max_tiles]
 
-        logger.info(f"Target tiling scheme consists of {len(windows)} overlapping sliding windows.")
+        logger.info(
+            f"Target tiling scheme consists of {len(windows)} overlapping sliding windows."
+        )
 
         # 2. Generate and score candidates for each window
         # Group candidates by window index
@@ -278,7 +328,7 @@ class TiledAmpliconRouter:
         for k, (win_start, win_end) in enumerate(windows):
             sub_seq = target_sequence[win_start:win_end]
             pairs = self._generate_tile_candidates(sub_seq, tile_size, num_return=10)
-            
+
             win_candidates = []
             for pair in pairs:
                 # Calculate predicted amplification success probability
@@ -288,16 +338,18 @@ class TiledAmpliconRouter:
                 abs_start = win_start + pair.forward.start
                 abs_end = win_start + pair.forward.start + pair.product_size
 
-                win_candidates.append({
-                    "pair": pair,
-                    "predicted_success": success,
-                    "target_id": f"tile_{k}",
-                    "is_valid": True,
-                    "abs_start": abs_start,
-                    "abs_end": abs_end,
-                    "win_start": win_start,
-                    "win_end": win_end
-                })
+                win_candidates.append(
+                    {
+                        "pair": pair,
+                        "predicted_success": success,
+                        "target_id": f"tile_{k}",
+                        "is_valid": True,
+                        "abs_start": abs_start,
+                        "abs_end": abs_end,
+                        "win_start": win_start,
+                        "win_end": win_end,
+                    }
+                )
 
             # Sort candidate pool for the window to put the highest success first
             win_candidates.sort(key=lambda x: -x["predicted_success"])
@@ -313,10 +365,14 @@ class TiledAmpliconRouter:
 
         N = len(valid_candidates)
         if N == 0:
-            logger.warning("No primer pairs could be generated across any target sliding windows.")
+            logger.warning(
+                "No primer pairs could be generated across any target sliding windows."
+            )
             return []
 
-        logger.info(f"Proceeding to DP solver with {N} valid window segments containing candidates.")
+        logger.info(
+            f"Proceeding to DP solver with {N} valid window segments containing candidates."
+        )
 
         # 3. Dynamic Programming solver loop
         # DP[k][i] = max score for a sequence ending with candidate i at window k
@@ -349,17 +405,27 @@ class TiledAmpliconRouter:
 
                     # Transition Penalty 1: Overlap error (quadratic deviation penalty)
                     overlap_error = (actual_overlap - overlap) ** 2
-                    overlap_penalty = 0.005 * overlap_error  # Scaled to balance with P_success (0.0 to 1.0)
+                    overlap_penalty = (
+                        0.005 * overlap_error
+                    )  # Scaled to balance with P_success (0.0 to 1.0)
 
                     # Hard overlap range boundaries: block amplicons with gaps or redundant overlaps
                     if actual_overlap <= 0 or actual_overlap > 2.5 * overlap:
                         overlap_penalty = 1e9
 
                     # Transition Penalty 2: Inter-tile dimerization check
-                    dg_ff = self.biophys.calculate_heterodimer_dg(pair_curr.forward.sequence, pair_prev.forward.sequence)
-                    dg_fr = self.biophys.calculate_heterodimer_dg(pair_curr.forward.sequence, pair_prev.reverse.sequence)
-                    dg_rf = self.biophys.calculate_heterodimer_dg(pair_curr.reverse.sequence, pair_prev.forward.sequence)
-                    dg_rr = self.biophys.calculate_heterodimer_dg(pair_curr.reverse.sequence, pair_prev.reverse.sequence)
+                    dg_ff = self.biophys.calculate_heterodimer_dg(
+                        pair_curr.forward.sequence, pair_prev.forward.sequence
+                    )
+                    dg_fr = self.biophys.calculate_heterodimer_dg(
+                        pair_curr.forward.sequence, pair_prev.reverse.sequence
+                    )
+                    dg_rf = self.biophys.calculate_heterodimer_dg(
+                        pair_curr.reverse.sequence, pair_prev.forward.sequence
+                    )
+                    dg_rr = self.biophys.calculate_heterodimer_dg(
+                        pair_curr.reverse.sequence, pair_prev.reverse.sequence
+                    )
 
                     min_dg = min(dg_ff, dg_fr, dg_rf, dg_rr)
                     dimer_penalty = 0.0
@@ -368,7 +434,11 @@ class TiledAmpliconRouter:
 
                     # Transition score
                     candidate_score = curr_cands[i]["predicted_success"]
-                    transition_score = dp[k - 1][j] + candidate_score - (overlap_penalty + dimer_penalty)
+                    transition_score = (
+                        dp[k - 1][j]
+                        + candidate_score
+                        - (overlap_penalty + dimer_penalty)
+                    )
 
                     if transition_score > best_score:
                         best_score = transition_score
@@ -388,7 +458,9 @@ class TiledAmpliconRouter:
 
         # 4. Fallback in case constraints are too tight (e.g. no valid path)
         if best_final_score < -1e8:
-            logger.warning("Constraints are too tight to find a dimer-free/overlap-compliant path. Running relaxed DP fallback...")
+            logger.warning(
+                "Constraints are too tight to find a dimer-free/overlap-compliant path. Running relaxed DP fallback..."
+            )
             return self._design_tiled_relaxed_fallback(valid_candidates, overlap)
 
         # 5. Backtrack to extract the optimal chain
@@ -399,10 +471,14 @@ class TiledAmpliconRouter:
             curr_idx = parent[k][curr_idx]
 
         selected_path.reverse()
-        logger.info(f"Optimal tiled amplicon path successfully designed with {len(selected_path)} overlapping tiles.")
+        logger.info(
+            f"Optimal tiled amplicon path successfully designed with {len(selected_path)} overlapping tiles."
+        )
         return selected_path
 
-    def _generate_tile_candidates(self, target_seq: str, tile_size: int, num_return: int = 10) -> List[PrimerPair]:
+    def _generate_tile_candidates(
+        self, target_seq: str, tile_size: int, num_return: int = 10
+    ) -> List[PrimerPair]:
         """Custom helper to design candidate primers with amplicon size tailored to the tile size."""
         seq_args = {
             "SEQUENCE_ID": "tile_locus",
@@ -430,6 +506,7 @@ class TiledAmpliconRouter:
         }
 
         import primer3
+
         try:
             results = primer3.bindings.design_primers(seq_args, global_args)
         except Exception as e:
@@ -491,9 +568,7 @@ class TiledAmpliconRouter:
         return primer_pairs
 
     def _design_tiled_relaxed_fallback(
-        self,
-        valid_candidates: List[List[Dict[str, Any]]],
-        overlap: int
+        self, valid_candidates: List[List[Dict[str, Any]]], overlap: int
     ) -> List[Dict[str, Any]]:
         """Relaxed DP solver fallback for high-density genomes or difficult targets."""
         logger.info("Executing relaxed DP tiled-amplicon optimization...")
@@ -528,7 +603,11 @@ class TiledAmpliconRouter:
                     if actual_overlap <= 0:
                         overlap_penalty += 10.0
 
-                    transition_score = dp[k - 1][j] + curr_cands[i]["predicted_success"] - overlap_penalty
+                    transition_score = (
+                        dp[k - 1][j]
+                        + curr_cands[i]["predicted_success"]
+                        - overlap_penalty
+                    )
 
                     if transition_score > best_score:
                         best_score = transition_score
@@ -552,6 +631,7 @@ class TiledAmpliconRouter:
             curr_idx = parent[k][curr_idx]
 
         selected_path.reverse()
-        logger.info(f"Relaxed tiled amplicon path successfully designed with {len(selected_path)} overlapping tiles.")
+        logger.info(
+            f"Relaxed tiled amplicon path successfully designed with {len(selected_path)} overlapping tiles."
+        )
         return selected_path
-

@@ -35,7 +35,9 @@ def test_rtprimerdb_validation() -> None:
     assert "ece" in metrics
 
     # Strict peer-review acceptance criterion: AUROC >= 0.85 on RTPrimerDB held-out set
-    assert metrics["roc_auc"] >= 0.85, f"RTPrimerDB ROC AUC={metrics['roc_auc']:.4f} must be >= 0.85"
+    assert (
+        metrics["roc_auc"] >= 0.85
+    ), f"RTPrimerDB ROC AUC={metrics['roc_auc']:.4f} must be >= 0.85"
     assert 0.0 <= metrics["ece"] <= 0.05, f"Expected low ECE, got {metrics['ece']:.4f}"
 
 
@@ -67,4 +69,6 @@ def test_hard_negatives_validation() -> None:
 
     assert isinstance(fpr, float)
     # Target FPR on failed/problematic primers must be <= 0.15
-    assert fpr <= 0.15, f"Hard negative False Positive Rate={fpr:.4f} exceeds target 0.15"
+    assert (
+        fpr <= 0.15
+    ), f"Hard negative False Positive Rate={fpr:.4f} exceeds target 0.15"

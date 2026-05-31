@@ -24,6 +24,7 @@ class MultiplexPanel:
         global_penalty:     Sum of all base-pairing penalties exceeding threshold.
         primer_labels:      List of names/labels mapping rows/cols in the matrix to sequences.
     """
+
     pairs: List[PrimerPair]
     dimerization_matrix: np.ndarray
     global_penalty: float
@@ -35,9 +36,13 @@ class MultiplexOptimizer:
 
     def __init__(self, biophysics_engine: Optional[BiophysicsEngine] = None) -> None:
         """Initializes the MultiplexOptimizer with a BiophysicsEngine instance."""
-        self.engine = biophysics_engine if biophysics_engine is not None else BiophysicsEngine()
+        self.engine = (
+            biophysics_engine if biophysics_engine is not None else BiophysicsEngine()
+        )
 
-    def build_dimerization_matrix(self, pairs: List[PrimerPair]) -> Tuple[np.ndarray, List[str]]:
+    def build_dimerization_matrix(
+        self, pairs: List[PrimerPair]
+    ) -> Tuple[np.ndarray, List[str]]:
         """Constructs a symmetric (2M, 2M) dimerization free energy matrix.
 
         Off-diagonal entries represent heterodimerization stability between different primers.
@@ -52,7 +57,7 @@ class MultiplexOptimizer:
         M = len(pairs)
         N = 2 * M
         matrix = np.zeros((N, N), dtype=np.float32)
-        
+
         # Extract sequences and labels
         sequences = []
         labels = []
@@ -69,7 +74,7 @@ class MultiplexOptimizer:
             for k in range(j, N):
                 seq_j = sequences[j]
                 seq_k = sequences[k]
-                
+
                 if j == k:
                     # Homodimer stability
                     features = self.engine.calculate_thermo_features(seq_j)
@@ -77,13 +82,15 @@ class MultiplexOptimizer:
                 else:
                     # Heterodimer stability
                     dg = float(self.engine.calculate_heterodimer_dg(seq_j, seq_k))
-                
+
                 matrix[j, k] = dg
                 matrix[k, j] = dg  # Symmetric entry
 
         return matrix, labels
 
-    def calculate_multiplex_penalty(self, matrix: np.ndarray, threshold: float = -6.0) -> float:
+    def calculate_multiplex_penalty(
+        self, matrix: np.ndarray, threshold: float = -6.0
+    ) -> float:
         """Calculates global multiplex cross-reactivity penalty based on the dimerization matrix.
 
         Accumulates penalties only for dimerization stabilities between different primer pairs
@@ -99,7 +106,7 @@ class MultiplexOptimizer:
         """
         N = matrix.shape[0]
         total_penalty = 0.0
-        
+
         # Loop over upper triangle to prevent double counting
         for j in range(N):
             for k in range(j, N):
@@ -110,7 +117,7 @@ class MultiplexOptimizer:
                     if dg < threshold:
                         # Penalty is the excess stability (positive value)
                         total_penalty += float(abs(dg - threshold))
-                    
+
         return round(total_penalty, 4)
 
     def design_compatible_panel(
@@ -137,7 +144,7 @@ class MultiplexOptimizer:
             return MultiplexPanel([], np.zeros((0, 0)), 0.0, [])
 
         selected_pairs: List[PrimerPair] = []
-        
+
         # 1. Initialize with the highest-ranked primer pair for the first target locus
         first_pool = candidate_pools[0]
         if not first_pool:
@@ -148,8 +155,10 @@ class MultiplexOptimizer:
         for locus_idx in range(1, len(candidate_pools)):
             pool = candidate_pools[locus_idx]
             if not pool:
-                raise ValueError(f"Candidate pool for target locus index {locus_idx} is empty.")
-                
+                raise ValueError(
+                    f"Candidate pool for target locus index {locus_idx} is empty."
+                )
+
             best_candidate: Optional[PrimerPair] = None
             min_incremental_penalty = float("inf")
             best_matrix: Optional[np.ndarray] = None
@@ -159,7 +168,7 @@ class MultiplexOptimizer:
             for candidate in pool:
                 test_set = selected_pairs + [candidate]
                 matrix, labels = self.build_dimerization_matrix(test_set)
-                
+
                 # Check for absolute severe cross-reactivity limit
                 # We scan only the new primer interactions against existing primers (the last two rows/cols)
                 N_test = matrix.shape[0]
@@ -171,13 +180,15 @@ class MultiplexOptimizer:
                             break
                     if severe_crossover:
                         break
-                        
+
                 if severe_crossover:
-                    logger.debug(f"Candidate from locus {locus_idx} rejected due to severe dimerization (exceeded {hard_limit} kcal/mol).")
+                    logger.debug(
+                        f"Candidate from locus {locus_idx} rejected due to severe dimerization (exceeded {hard_limit} kcal/mol)."
+                    )
                     continue  # Reject candidate immediately
-                    
+
                 penalty = self.calculate_multiplex_penalty(matrix, threshold)
-                
+
                 # We want to minimize the global penalty, or break ties using individual penalty/rank
                 if penalty < min_incremental_penalty:
                     min_incremental_penalty = penalty
@@ -188,11 +199,15 @@ class MultiplexOptimizer:
             # Rescue fallback: If all candidates in the pool violated the hard limit,
             # fall back to the first candidate of the pool to ensure panel continuity, but print warning.
             if best_candidate is None:
-                logger.warning(f"All candidates for locus index {locus_idx} violated hard dimerization limit. Forcing fallback to top-ranked candidate.")
+                logger.warning(
+                    f"All candidates for locus index {locus_idx} violated hard dimerization limit. Forcing fallback to top-ranked candidate."
+                )
                 best_candidate = pool[0]
                 test_set = selected_pairs + [best_candidate]
                 best_matrix, best_labels = self.build_dimerization_matrix(test_set)
-                min_incremental_penalty = self.calculate_multiplex_penalty(best_matrix, threshold)
+                min_incremental_penalty = self.calculate_multiplex_penalty(
+                    best_matrix, threshold
+                )
 
             selected_pairs.append(best_candidate)
 
@@ -200,5 +215,7 @@ class MultiplexOptimizer:
         final_matrix, final_labels = self.build_dimerization_matrix(selected_pairs)
         final_penalty = self.calculate_multiplex_penalty(final_matrix, threshold)
 
-        logger.info(f"Multiplex panel designed successfully! Selected {len(selected_pairs)} compatible pairs with a global penalty of {final_penalty:.4f}.")
+        logger.info(
+            f"Multiplex panel designed successfully! Selected {len(selected_pairs)} compatible pairs with a global penalty of {final_penalty:.4f}."
+        )
         return MultiplexPanel(selected_pairs, final_matrix, final_penalty, final_labels)

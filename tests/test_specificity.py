@@ -70,7 +70,7 @@ def test_check_specificity_mismatches(mock_fasta: str) -> None:
 
     # Sequence containing 2 mismatches compared to target chr1 ("GAGGCACTCTTCCAGCC")
     primer_mismatch = "GAcGCACaCTTCCAGCC"
-    
+
     # Assert it gets rejected if max_mismatches = 0
     hits_fail = engine.check_specificity(primer_mismatch, max_mismatches=0)
     assert len(hits_fail) == 0
@@ -91,7 +91,7 @@ def test_variant_filter_eval(mock_vcf: str) -> None:
     assert var_filter.variants[0].pos == 10
     assert var_filter.variants[0].maf == 0.05
 
-    # 1. Forward primer: starts at 50, len 20 (bounds 50-70). 
+    # 1. Forward primer: starts at 50, len 20 (bounds 50-70).
     # Pos 68 has a high MAF variant, which falls in the critical 3' end (last 5bp).
     penalty_f, valid_f = var_filter.evaluate_primer(
         primer_seq="TCCAGCCTTCCTTCCTGGGC", start_pos=50, strand=1, maf_threshold=0.01

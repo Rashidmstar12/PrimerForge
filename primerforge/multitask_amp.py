@@ -51,6 +51,7 @@ logger = setup_logger("primerforge.multitask_amp")
 # Helper: Layer Normalization (forward + backward)
 # ---------------------------------------------------------------------------
 
+
 class LayerNorm:
     """Layer Normalization: normalizes across feature dimension.
 
@@ -59,8 +60,8 @@ class LayerNorm:
 
     def __init__(self, dim: int, eps: float = 1e-6) -> None:
         self.eps = eps
-        self.gamma = np.ones(dim, dtype=np.float32)   # scale
-        self.beta = np.zeros(dim, dtype=np.float32)   # shift
+        self.gamma = np.ones(dim, dtype=np.float32)  # scale
+        self.beta = np.zeros(dim, dtype=np.float32)  # shift
         self.dgamma = np.zeros_like(self.gamma)
         self.dbeta = np.zeros_like(self.beta)
         # Adam moments
@@ -83,12 +84,20 @@ class LayerNorm:
     def backward(self, d_out: np.ndarray) -> np.ndarray:
         """d_out: same shape as x. Returns gradient w.r.t. input."""
         N = d_out.shape[-1]
-        self.dgamma = np.sum(d_out * self._xhat, axis=0) if d_out.ndim > 1 else d_out * self._xhat
+        self.dgamma = (
+            np.sum(d_out * self._xhat, axis=0) if d_out.ndim > 1 else d_out * self._xhat
+        )
         self.dbeta = np.sum(d_out, axis=0) if d_out.ndim > 1 else d_out
 
         d_xhat = d_out * self.gamma
-        d_var = np.sum(d_xhat * self._xhat, axis=-1, keepdims=True) * (-0.5) / (self._std ** 2)
-        d_mu = np.sum(-d_xhat / self._std, axis=-1, keepdims=True) + d_var * np.mean(-2 * self._xhat * self._std, axis=-1, keepdims=True)
+        d_var = (
+            np.sum(d_xhat * self._xhat, axis=-1, keepdims=True)
+            * (-0.5)
+            / (self._std**2)
+        )
+        d_mu = np.sum(-d_xhat / self._std, axis=-1, keepdims=True) + d_var * np.mean(
+            -2 * self._xhat * self._std, axis=-1, keepdims=True
+        )
         d_x = d_xhat / self._std + d_var * 2 * self._xhat * self._std / N + d_mu / N
         return d_x
 
@@ -103,6 +112,7 @@ class LayerNorm:
 # ---------------------------------------------------------------------------
 # Helper: Dense Linear Layer with Adam optimizer state
 # ---------------------------------------------------------------------------
+
 
 class DenseLayer:
     """Fully connected linear layer: y = x @ W + b, with built-in Adam state."""
@@ -134,17 +144,24 @@ class DenseLayer:
         self.db = np.sum(d_out, axis=0) if d_out.ndim > 1 else d_out
         return d_out @ self.W.T
 
-    def adam_step(self, lr: float, t: int, beta1: float = 0.9, beta2: float = 0.999, eps: float = 1e-8) -> None:
+    def adam_step(
+        self,
+        lr: float,
+        t: int,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ) -> None:
         self.mW = beta1 * self.mW + (1 - beta1) * self.dW
-        self.vW = beta2 * self.vW + (1 - beta2) * self.dW ** 2
-        mW_hat = self.mW / (1 - beta1 ** t)
-        vW_hat = self.vW / (1 - beta2 ** t)
+        self.vW = beta2 * self.vW + (1 - beta2) * self.dW**2
+        mW_hat = self.mW / (1 - beta1**t)
+        vW_hat = self.vW / (1 - beta2**t)
         self.W -= lr * mW_hat / (np.sqrt(vW_hat) + eps)
 
         self.mb = beta1 * self.mb + (1 - beta1) * self.db
-        self.vb = beta2 * self.vb + (1 - beta2) * self.db ** 2
-        mb_hat = self.mb / (1 - beta1 ** t)
-        vb_hat = self.vb / (1 - beta2 ** t)
+        self.vb = beta2 * self.vb + (1 - beta2) * self.db**2
+        mb_hat = self.mb / (1 - beta1**t)
+        vb_hat = self.vb / (1 - beta2**t)
         self.b -= lr * mb_hat / (np.sqrt(vb_hat) + eps)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -159,6 +176,7 @@ class DenseLayer:
 # Helper: Sigmoid (reused across all output heads)
 # ---------------------------------------------------------------------------
 
+
 def _sigmoid(z: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(z, -15.0, 15.0)))
 
@@ -166,6 +184,7 @@ def _sigmoid(z: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Core: MultiTaskAmpHead
 # ---------------------------------------------------------------------------
+
 
 class MultiTaskAmpHead:
     """Multi-Task Amplification Profile predictor in pure NumPy.
@@ -188,9 +207,9 @@ class MultiTaskAmpHead:
     """
 
     # Output ranges (used for linear denormalization at prediction time)
-    CT_MIN, CT_MAX = 15.0, 40.0       # Ct range [15, 40]
-    YIELD_MIN, YIELD_MAX = 0.0, 1.0   # Yield: sigmoid output is already in [0,1]
-    MELT_MIN, MELT_MAX = 1.0, 6.0     # Melt peaks [1, 6]
+    CT_MIN, CT_MAX = 15.0, 40.0  # Ct range [15, 40]
+    YIELD_MIN, YIELD_MAX = 0.0, 1.0  # Yield: sigmoid output is already in [0,1]
+    MELT_MIN, MELT_MAX = 1.0, 6.0  # Melt peaks [1, 6]
 
     def __init__(
         self,
@@ -248,8 +267,8 @@ class MultiTaskAmpHead:
 
         self._ct_z1: Optional[np.ndarray] = None
         self._ct_a1: Optional[np.ndarray] = None
-        self._ct_logit: Optional[np.ndarray] = None   # raw pre-sigmoid output (1,1)
-        self._ct_sig: Optional[np.ndarray] = None     # sigmoid(ct_logit) in [0,1]
+        self._ct_logit: Optional[np.ndarray] = None  # raw pre-sigmoid output (1,1)
+        self._ct_sig: Optional[np.ndarray] = None  # sigmoid(ct_logit) in [0,1]
 
         self._yield_z1: Optional[np.ndarray] = None
         self._yield_a1: Optional[np.ndarray] = None
@@ -310,8 +329,8 @@ class MultiTaskAmpHead:
         # Head A: Ct Value — sigmoid → denormalize to [CT_MIN, CT_MAX]
         self._ct_z1 = self.ct_h1.forward(self._trunk_a2)
         self._ct_a1 = np.maximum(0.0, self._ct_z1)
-        self._ct_logit = self.ct_out.forward(self._ct_a1)      # (1,1)
-        self._ct_sig = _sigmoid(self._ct_logit)                # (1,1) ∈ [0,1]
+        self._ct_logit = self.ct_out.forward(self._ct_a1)  # (1,1)
+        self._ct_sig = _sigmoid(self._ct_logit)  # (1,1) ∈ [0,1]
         ct_pred = float(self._norm_to_ct(float(self._ct_sig[0, 0])))
 
         # Head B: Endpoint Yield — sigmoid → [0, 1]
@@ -376,9 +395,9 @@ class MultiTaskAmpHead:
         melt_err = s_melt - melt_t_norm
 
         loss = (
-            self.w_ct * ct_err ** 2
-            + self.w_yield * yield_err ** 2
-            + self.w_melt * melt_err ** 2
+            self.w_ct * ct_err**2
+            + self.w_yield * yield_err**2
+            + self.w_melt * melt_err**2
         )
 
         # ── Gradient through sigmoid: d(sig)/dz = sig*(1-sig) ────────
@@ -422,13 +441,24 @@ class MultiTaskAmpHead:
     def _clip_gradients(self, max_norm: float = 5.0) -> None:
         """Clips all parameter gradients by global L2 norm."""
         all_grads = [
-            self.trunk_l1.dW, self.trunk_l1.db,
-            self.trunk_l2.dW, self.trunk_l2.db,
-            self.ct_h1.dW, self.ct_h1.db, self.ct_out.dW, self.ct_out.db,
-            self.yield_h1.dW, self.yield_h1.db, self.yield_out.dW, self.yield_out.db,
-            self.melt_h1.dW, self.melt_h1.db, self.melt_out.dW, self.melt_out.db,
+            self.trunk_l1.dW,
+            self.trunk_l1.db,
+            self.trunk_l2.dW,
+            self.trunk_l2.db,
+            self.ct_h1.dW,
+            self.ct_h1.db,
+            self.ct_out.dW,
+            self.ct_out.db,
+            self.yield_h1.dW,
+            self.yield_h1.db,
+            self.yield_out.dW,
+            self.yield_out.db,
+            self.melt_h1.dW,
+            self.melt_h1.db,
+            self.melt_out.dW,
+            self.melt_out.db,
         ]
-        global_norm = float(np.sqrt(sum(np.sum(g ** 2) for g in all_grads)))
+        global_norm = float(np.sqrt(sum(np.sum(g**2) for g in all_grads)))
         if global_norm > max_norm:
             scale = max_norm / (global_norm + 1e-8)
             for g in all_grads:
@@ -442,10 +472,14 @@ class MultiTaskAmpHead:
         """Applies one Adam update step to all parameters."""
         self.t += 1
         layers = [
-            self.trunk_l1, self.trunk_l2,
-            self.ct_h1, self.ct_out,
-            self.yield_h1, self.yield_out,
-            self.melt_h1, self.melt_out,
+            self.trunk_l1,
+            self.trunk_l2,
+            self.ct_h1,
+            self.ct_out,
+            self.yield_h1,
+            self.yield_out,
+            self.melt_h1,
+            self.melt_out,
         ]
         for layer in layers:
             layer.adam_step(lr, self.t)
@@ -518,7 +552,9 @@ class MultiTaskAmpHead:
 
             avg_loss = batch_loss / n_batches
             epoch_losses.append(avg_loss)
-            logger.debug(f"MultiTaskAmp Epoch {epoch + 1}/{epochs} | Loss: {avg_loss:.5f}")
+            logger.debug(
+                f"MultiTaskAmp Epoch {epoch + 1}/{epochs} | Loss: {avg_loss:.5f}"
+            )
 
         return epoch_losses
 
@@ -567,6 +603,7 @@ class MultiTaskAmpHead:
 # Convenience: synthetic dataset generator for bootstrap training
 # ---------------------------------------------------------------------------
 
+
 def generate_synthetic_amp_targets(
     n: int = 2000,
     seed: int = 42,
@@ -594,8 +631,12 @@ def generate_synthetic_amp_targets(
     cross_dimer = -rng.exponential(2.5, N)
     f_gc = rng.normal(50.0, 5.0, N)
     r_gc = rng.normal(50.0, 5.0, N)
-    f_off_targets = rng.choice([0, 1, 2, 5], size=N, p=[0.85, 0.10, 0.04, 0.01]).astype(float)
-    r_off_targets = rng.choice([0, 1, 2, 5], size=N, p=[0.85, 0.10, 0.04, 0.01]).astype(float)
+    f_off_targets = rng.choice([0, 1, 2, 5], size=N, p=[0.85, 0.10, 0.04, 0.01]).astype(
+        float
+    )
+    r_off_targets = rng.choice([0, 1, 2, 5], size=N, p=[0.85, 0.10, 0.04, 0.01]).astype(
+        float
+    )
 
     # Build a simplified 40-dim feature matrix
     X = np.zeros((N, 40), dtype=np.float32)
@@ -618,11 +659,11 @@ def generate_synthetic_amp_targets(
     # Ct Value: inversely related to efficiency (good primers → lower Ct)
     # Base Ct ≈ 25, increases with suboptimal features
     ct = 25.0 * np.ones(N)
-    ct += 2.0 * tm_diff                          # Tm mismatch → later cycle
+    ct += 2.0 * tm_diff  # Tm mismatch → later cycle
     ct += np.where(f_hairpin < -4.0, 3.0, 0.0)  # Strong hairpin → late amp
     ct += np.where(r_hairpin < -4.0, 3.0, 0.0)
     ct += np.where(cross_dimer < -5.0, 4.0, 0.0)
-    ct += 2.0 * f_off_targets                    # Off-targets compete → higher Ct
+    ct += 2.0 * f_off_targets  # Off-targets compete → higher Ct
     ct += 2.0 * r_off_targets
     ct += rng.normal(0, 1.0, N)
     Y_ct = np.clip(ct, 15.0, 40.0).astype(np.float32)
@@ -642,9 +683,11 @@ def generate_synthetic_amp_targets(
 
     # Melt Peak Count: mostly 1 for clean designs, more for problematic ones
     melt = np.ones(N)
-    melt += np.where(f_off_targets > 0, f_off_targets * 0.5, 0.0)  # off-target → extra peaks
+    melt += np.where(
+        f_off_targets > 0, f_off_targets * 0.5, 0.0
+    )  # off-target → extra peaks
     melt += np.where(r_off_targets > 0, r_off_targets * 0.5, 0.0)
-    melt += np.where(cross_dimer < -5.0, 1.0, 0.0)                 # strong dimer → dimer peak
+    melt += np.where(cross_dimer < -5.0, 1.0, 0.0)  # strong dimer → dimer peak
     melt += rng.uniform(0, 0.5, N)
     Y_melt = np.clip(np.round(melt), 1.0, 6.0).astype(np.float32)
 

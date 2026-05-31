@@ -14,16 +14,28 @@ def mock_user_data() -> pd.DataFrame:
     # 10 biologically realistic sequences with positive/negative wet-lab outcomes
     data = {
         "forward_seq": [
-            "CACCATTGGCAATGAGCGGT", "CACCATTGGCAATGAGCGGT", "CACCATTGGCAATGAGCGGT",
-            "CACCATTGGCAATGAGCGGT", "CACCATTGGCAATGAGCGGT", "CACCATTGGCAATGAGCGGT",
-            "CACCATTGGCAATGAGCGGT", "CACCATTGGCAATGAGCGGT", "CACCATTGGCAATGAGCGGT",
-            "CACCATTGGCAATGAGCGGT"
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
+            "CACCATTGGCAATGAGCGGT",
         ],
         "reverse_seq": [
-            "CGCTCAGGAGGAGCAATGAT", "CGCTCAGGAGGAGCAATGAT", "CGCTCAGGAGGAGCAATGAT",
-            "CGCTCAGGAGGAGCAATGAT", "CGCTCAGGAGGAGCAATGAT", "CGCTCAGGAGGAGCAATGAT",
-            "CGCTCAGGAGGAGCAATGAT", "CGCTCAGGAGGAGCAATGAT", "CGCTCAGGAGGAGCAATGAT",
-            "CGCTCAGGAGGAGCAATGAT"
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
+            "CGCTCAGGAGGAGCAATGAT",
         ],
         "success": [0.95, 0.90, 0.05, 0.98, 0.12, 0.88, 0.95, 0.08, 0.85, 0.92],
         "product_size": [150] * 10,
@@ -34,7 +46,7 @@ def mock_user_data() -> pd.DataFrame:
         "salt_monovalent_mm": [50.0] * 10,
         "salt_divalent_mm": [1.5] * 10,
         "dntp_conc_mm": [0.2] * 10,
-        "polymerase": ["Standard_Taq"] * 10
+        "polymerase": ["Standard_Taq"] * 10,
     }
     return pd.DataFrame(data)
 
@@ -50,13 +62,20 @@ def test_fine_tune_on_user_data(tmp_path, mock_user_data) -> None:
         scorer.load()
 
     out_dir = tmp_path / "fine_tuned"
-    
+
     # Run ensembled transfer learning
     results = scorer.fine_tune_on_user_data(mock_user_data, str(out_dir))
 
     # 1. Assert comparative metrics dictionary holds proper keys and floats
     assert isinstance(results, dict)
-    for key in ["Brier_Before", "ECE_Before", "Brier_After", "ECE_After", "platt_a", "platt_b"]:
+    for key in [
+        "Brier_Before",
+        "ECE_Before",
+        "Brier_After",
+        "ECE_After",
+        "platt_a",
+        "platt_b",
+    ]:
         assert key in results
         assert isinstance(results[key], float)
 
@@ -73,7 +92,7 @@ def test_fine_tune_on_user_data(tmp_path, mock_user_data) -> None:
     # 4. Verify that we can instantiate and load a fresh MLScorer targeting the fine-tuned assets
     new_model_file = out_dir / "primerforge_lightgbm.model"
     new_scorer = MLScorer(model_path=str(new_model_file))
-    
+
     assert len(new_scorer.models) == len(scorer.models)
     assert new_scorer.platt_a == scorer.platt_a
     assert new_scorer.platt_b == scorer.platt_b

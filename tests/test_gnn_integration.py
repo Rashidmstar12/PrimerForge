@@ -37,9 +37,12 @@ from primerforge.ml_scorer import MLScorer
 # Helper fixtures
 # ---------------------------------------------------------------------------
 
-def make_primer_pair(f_seq: str = "ATGCATGCATGCATGCATGC",
-                     r_seq: str = "GCATGCATGCATGCATGCAT",
-                     product_size: int = 120) -> PrimerPair:
+
+def make_primer_pair(
+    f_seq: str = "ATGCATGCATGCATGCATGC",
+    r_seq: str = "GCATGCATGCATGCATGCAT",
+    product_size: int = 120,
+) -> PrimerPair:
     """Creates a lightweight PrimerPair object from raw sequences using primer3 biophysics."""
     engine = BiophysicsEngine()
 
@@ -84,19 +87,21 @@ def make_primer_pair(f_seq: str = "ATGCATGCATGCATGCATGC",
 # Test 1: Feature vector is exactly 40 dimensions
 # ---------------------------------------------------------------------------
 
+
 def test_extract_features_dim() -> None:
     """Verifies that extract_features() returns a 40-dimensional feature vector."""
     scorer = MLScorer()
     pair = make_primer_pair()
     features = scorer.extract_features(pair)
-    assert len(features) == 40, (
-        f"Expected 40-dimensional feature vector, got {len(features)}."
-    )
+    assert (
+        len(features) == 40
+    ), f"Expected 40-dimensional feature vector, got {len(features)}."
 
 
 # ---------------------------------------------------------------------------
 # Test 2: GNN features at indices 36-37 are non-trivially non-zero
 # ---------------------------------------------------------------------------
+
 
 def test_gnn_features_are_present() -> None:
     """Verifies GNN-predicted Tm/dG (indices 36-37) are non-zero for a real primer pair."""
@@ -115,26 +120,28 @@ def test_gnn_features_are_present() -> None:
 # Test 3: explain_prediction returns all 40 feature names
 # ---------------------------------------------------------------------------
 
+
 def test_explain_prediction_has_40_keys() -> None:
     """Verifies that explain_prediction() returns contributions for all 40 features."""
     scorer = MLScorer()
     pair = make_primer_pair()
     contributions = scorer.explain_prediction(pair)
     assert isinstance(contributions, dict), "explain_prediction() must return a dict."
-    assert "gnn_pred_tm" in contributions, (
-        "explain_prediction() must include 'gnn_pred_tm' key."
-    )
-    assert "gnn_pred_dg" in contributions, (
-        "explain_prediction() must include 'gnn_pred_dg' key."
-    )
-    assert len(contributions) == 40, (
-        f"Expected 40 feature contributions, got {len(contributions)}."
-    )
+    assert (
+        "gnn_pred_tm" in contributions
+    ), "explain_prediction() must include 'gnn_pred_tm' key."
+    assert (
+        "gnn_pred_dg" in contributions
+    ), "explain_prediction() must include 'gnn_pred_dg' key."
+    assert (
+        len(contributions) == 40
+    ), f"Expected 40 feature contributions, got {len(contributions)}."
 
 
 # ---------------------------------------------------------------------------
 # Test 4: predict_success returns a valid probability
 # ---------------------------------------------------------------------------
+
 
 def test_predict_success_range() -> None:
     """Verifies predict_success() returns a float in the range [0.01, 0.99]."""
@@ -142,14 +149,15 @@ def test_predict_success_range() -> None:
     pair = make_primer_pair()
     prob = scorer.predict_success(pair)
     assert isinstance(prob, float), "predict_success() must return a float."
-    assert 0.01 <= prob <= 0.99, (
-        f"Expected success probability in [0.01, 0.99], got {prob:.4f}."
-    )
+    assert (
+        0.01 <= prob <= 0.99
+    ), f"Expected success probability in [0.01, 0.99], got {prob:.4f}."
 
 
 # ---------------------------------------------------------------------------
 # Test 5: predict_success_with_uncertainty returns (prob, std)
 # ---------------------------------------------------------------------------
+
 
 def test_predict_success_with_uncertainty() -> None:
     """Verifies predict_success_with_uncertainty() returns (prob, std) with valid ranges."""
@@ -165,6 +173,7 @@ def test_predict_success_with_uncertainty() -> None:
 # Test 6: GNN weights survive save/load round-trip
 # ---------------------------------------------------------------------------
 
+
 def test_gnn_weights_serialization() -> None:
     """Verifies that BioGNN weights survive a full JSON serialize/deserialize round-trip."""
     gnn_original = BioGNN()
@@ -179,18 +188,20 @@ def test_gnn_weights_serialization() -> None:
     gnn_loaded.from_dict(weights_dict)
 
     pred_after = gnn_loaded.forward(X, A)
-    assert np.allclose(pred_before, pred_after, atol=1e-5), (
-        "GNN forward pass output should be identical after serialization round-trip."
-    )
+    assert np.allclose(
+        pred_before, pred_after, atol=1e-5
+    ), "GNN forward pass output should be identical after serialization round-trip."
 
 
 # ---------------------------------------------------------------------------
 # Test 7: _add_gnn_features appends exactly 2 GNN columns
 # ---------------------------------------------------------------------------
 
+
 def test_add_gnn_features_shape() -> None:
     """Verifies _add_gnn_features() and _add_transformer_features() appends columns to an existing feature matrix."""
     import pandas as pd
+
     scorer = MLScorer()
 
     # Create a small dummy feature matrix (N=5 samples, 36 base features)
@@ -198,25 +209,29 @@ def test_add_gnn_features_shape() -> None:
     X_base = np.random.randn(N, 36).astype(np.float32)
 
     # Dummy dataframe with forward/reverse sequences
-    df = pd.DataFrame({
-        "forward_seq": ["ATGCATGCATGCATGCATGC"] * N,
-        "reverse_seq": ["GCATGCATGCATGCATGCAT"] * N,
-    })
+    df = pd.DataFrame(
+        {
+            "forward_seq": ["ATGCATGCATGCATGCATGC"] * N,
+            "reverse_seq": ["GCATGCATGCATGCATGCAT"] * N,
+        }
+    )
 
     X_augmented = scorer._add_gnn_features(X_base, df)
     X_augmented = scorer._add_transformer_features(X_augmented, df)
-    assert X_augmented.shape == (N, 40), (
-        f"Expected shape (N, 40) after GNN and transformer augmentation, got {X_augmented.shape}."
-    )
+    assert X_augmented.shape == (
+        N,
+        40,
+    ), f"Expected shape (N, 40) after GNN and transformer augmentation, got {X_augmented.shape}."
     # GNN columns should be finite
-    assert np.all(np.isfinite(X_augmented[:, 36:])), (
-        "GNN-augmented columns must contain only finite values."
-    )
+    assert np.all(
+        np.isfinite(X_augmented[:, 36:])
+    ), "GNN-augmented columns must contain only finite values."
 
 
 # ---------------------------------------------------------------------------
 # Test 8: BioGNN full backprop gradient check (end-to-end numerical diff)
 # ---------------------------------------------------------------------------
+
 
 def test_biognn_end_to_end_grad() -> None:
     """Checks BioGNN W1 dense weight gradient via finite differences (end-to-end)."""
@@ -246,14 +261,15 @@ def test_biognn_end_to_end_grad() -> None:
 
             dW1_numeric[i, j] = np.sum(d_out * (pred_plus - pred_minus)) / (2 * eps)
 
-    assert np.allclose(dW1_analytic, dW1_numeric, atol=2e-3, rtol=2e-3), (
-        "BioGNN W1 analytic gradients do not match finite-difference estimates."
-    )
+    assert np.allclose(
+        dW1_analytic, dW1_numeric, atol=2e-3, rtol=2e-3
+    ), "BioGNN W1 analytic gradients do not match finite-difference estimates."
 
 
 # ---------------------------------------------------------------------------
 # Test 9: BioGNN converges (loss decreases) over training epochs
 # ---------------------------------------------------------------------------
+
 
 def test_biognn_convergence_extended() -> None:
     """Verifies BioGNN loss monotonically decreases over 20 epochs of training."""
@@ -266,14 +282,17 @@ def test_biognn_convergence_extended() -> None:
         ("AAGCTTAAGCTTAAGCTTAA", "TTAAGCTTAAGCTTAAGCTT"),
         ("GCGCGCGCGCGCGCGCGCGC", "CGCGCGCGCGCGCGCGCGCG"),
     ]
-    targets = np.array([
-        [58.0, -2.0],
-        [60.0, -1.5],
-        [62.0, -4.0],
-        [55.0, -0.5],
-        [57.0, -3.0],
-        [65.0, -6.0],
-    ], dtype=np.float32)
+    targets = np.array(
+        [
+            [58.0, -2.0],
+            [60.0, -1.5],
+            [62.0, -4.0],
+            [55.0, -0.5],
+            [57.0, -3.0],
+            [65.0, -6.0],
+        ],
+        dtype=np.float32,
+    )
 
     gnn = BioGNN()
     losses = gnn.train_on_pairs(sequences, targets, epochs=20, lr=0.01)
@@ -282,14 +301,15 @@ def test_biognn_convergence_extended() -> None:
     # Last 5 epoch average should be lower than first 5
     early_avg = float(np.mean(losses[:5]))
     late_avg = float(np.mean(losses[-5:]))
-    assert late_avg < early_avg, (
-        f"BioGNN must converge: early_loss={early_avg:.4f}, late_loss={late_avg:.4f}"
-    )
+    assert (
+        late_avg < early_avg
+    ), f"BioGNN must converge: early_loss={early_avg:.4f}, late_loss={late_avg:.4f}"
 
 
 # ---------------------------------------------------------------------------
 # Test 10: explain_prediction fallback handles legacy 36-dim booster importances
 # ---------------------------------------------------------------------------
+
 
 def test_explain_prediction_fallback_legacy_dims() -> None:
     """Verifies the importance fallback loop handles 36-dim importances gracefully
@@ -311,16 +331,16 @@ def test_explain_prediction_fallback_legacy_dims() -> None:
 
         contributions = scorer.explain_prediction(pair)
         # Should complete without error and return 40 keys
-        assert len(contributions) == 40, (
-            f"Legacy fallback must return 40 contributions, got {len(contributions)}"
-        )
+        assert (
+            len(contributions) == 40
+        ), f"Legacy fallback must return 40 contributions, got {len(contributions)}"
         # GNN features should be padded to 0.0 in legacy mode
-        assert contributions["gnn_pred_tm"] == 0.0, (
-            "Legacy-padded GNN Tm importance should be 0.0"
-        )
-        assert contributions["gnn_pred_dg"] == 0.0, (
-            "Legacy-padded GNN dG importance should be 0.0"
-        )
+        assert (
+            contributions["gnn_pred_tm"] == 0.0
+        ), "Legacy-padded GNN Tm importance should be 0.0"
+        assert (
+            contributions["gnn_pred_dg"] == 0.0
+        ), "Legacy-padded GNN dG importance should be 0.0"
 
         # Restore
         scorer.models[0].feature_importance = orig_importance

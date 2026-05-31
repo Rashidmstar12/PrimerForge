@@ -36,7 +36,7 @@ def mock_pairs() -> List[Dict[str, Any]]:
         reverse=PrimerSequence(r_seq1, 100, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
         product_size=120,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
     f_seq2 = "GCATCGATCGATCGATCGAT"
@@ -46,7 +46,7 @@ def mock_pairs() -> List[Dict[str, Any]]:
         reverse=PrimerSequence(r_seq2, 100, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
         product_size=120,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
     # Let's construct scored dicts
@@ -55,20 +55,20 @@ def mock_pairs() -> List[Dict[str, Any]]:
             "pair": pair1,
             "predicted_success": 0.95,
             "target_id": "locus_A",
-            "is_valid": True
+            "is_valid": True,
         },
         {
             "pair": pair2,
             "predicted_success": 0.90,
             "target_id": "locus_B",
-            "is_valid": True
+            "is_valid": True,
         },
         {
             "pair": pair1,
             "predicted_success": 0.85,
             "target_id": "locus_B",  # Alternative for Locus B, should trigger locus constraint
-            "is_valid": True
-        }
+            "is_valid": True,
+        },
     ]
 
 
@@ -94,7 +94,7 @@ def test_dimer_constraint(optimizer: MultiplexOptimizer) -> None:
         reverse=PrimerSequence(f_seq, 100, 20, 60.0, 50.0, 0.0, 0.0, 0.0),
         product_size=120,
         cross_dimer_dg=0.0,
-        penalty=0.0
+        penalty=0.0,
     )
 
     scored = [
@@ -102,20 +102,22 @@ def test_dimer_constraint(optimizer: MultiplexOptimizer) -> None:
             "pair": pair1,
             "predicted_success": 0.95,
             "target_id": "locus_A",
-            "is_valid": True
+            "is_valid": True,
         },
         {
             "pair": pair1,
             "predicted_success": 0.90,
             "target_id": "locus_B",
-            "is_valid": True
-        }
+            "is_valid": True,
+        },
     ]
 
     with patch.object(BiophysicsEngine, "calculate_heterodimer_dg", return_value=-8.0):
         # With dimer_dg of -8.0 kcal/mol, they are highly incompatible (limit is -4.5)
-        selected, obj = optimizer.optimize_panel(scored, max_plex=2, delta_g_threshold=-4.5)
-        
+        selected, obj = optimizer.optimize_panel(
+            scored, max_plex=2, delta_g_threshold=-4.5
+        )
+
         # The solver must choose at most one because they dimerize severely!
         assert len(selected) <= 1
 
@@ -124,7 +126,7 @@ def test_greedy_fallback(optimizer: MultiplexOptimizer, mock_pairs) -> None:
     """Verifies that the optimizer falls back to a clean greedy heuristic if the ILP solver fails."""
     with patch("pulp.LpProblem.solve", side_effect=Exception("Solver crash")):
         selected, obj = optimizer.optimize_panel(mock_pairs, max_plex=2)
-        
+
         assert len(selected) <= 2
         selected_loci = [item["target_id"] for item in selected]
         assert selected_loci.count("locus_B") <= 1

@@ -28,6 +28,7 @@ from primerforge.ml_scorer import MLScorer
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
+
 def make_multitask_head() -> MultiTaskAmpHead:
     """Returns a freshly initialized MultiTaskAmpHead."""
     np.random.seed(42)
@@ -51,18 +52,31 @@ def make_primer_pair(
     f_gc = 100.0 * sum(1 for b in f_seq.upper() if b in "GC") / len(f_seq)
     r_gc = 100.0 * sum(1 for b in r_seq.upper() if b in "GC") / len(r_seq)
     fwd = PrimerSequence(
-        sequence=f_seq, start=0, length=len(f_seq),
-        tm=f_th["tm"], gc_percent=f_gc,
-        hairpin_dg=f_th["hairpin_dg"], homodimer_dg=f_th["homodimer_dg"], penalty=0.0,
+        sequence=f_seq,
+        start=0,
+        length=len(f_seq),
+        tm=f_th["tm"],
+        gc_percent=f_gc,
+        hairpin_dg=f_th["hairpin_dg"],
+        homodimer_dg=f_th["homodimer_dg"],
+        penalty=0.0,
     )
     rev = PrimerSequence(
-        sequence=r_seq, start=product_size, length=len(r_seq),
-        tm=r_th["tm"], gc_percent=r_gc,
-        hairpin_dg=r_th["hairpin_dg"], homodimer_dg=r_th["homodimer_dg"], penalty=0.0,
+        sequence=r_seq,
+        start=product_size,
+        length=len(r_seq),
+        tm=r_th["tm"],
+        gc_percent=r_gc,
+        hairpin_dg=r_th["hairpin_dg"],
+        homodimer_dg=r_th["homodimer_dg"],
+        penalty=0.0,
     )
     return PrimerPair(
-        forward=fwd, reverse=rev, product_size=product_size,
-        cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq), penalty=0.0,
+        forward=fwd,
+        reverse=rev,
+        product_size=product_size,
+        cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq),
+        penalty=0.0,
     )
 
 
@@ -70,19 +84,27 @@ def make_primer_pair(
 # Test 1: Forward pass returns 3 finite floats
 # ---------------------------------------------------------------------------
 
+
 def test_forward_returns_three_finite_floats() -> None:
     """Verifies that forward() returns exactly 3 finite float values."""
     head = make_multitask_head()
     x = make_random_features(0)
     ct, yield_, melt = head.forward(x)
-    assert isinstance(ct, float) and np.isfinite(ct), f"Ct must be finite float, got {ct}"
-    assert isinstance(yield_, float) and np.isfinite(yield_), f"Yield must be finite float, got {yield_}"
-    assert isinstance(melt, float) and np.isfinite(melt), f"Melt must be finite float, got {melt}"
+    assert isinstance(ct, float) and np.isfinite(
+        ct
+    ), f"Ct must be finite float, got {ct}"
+    assert isinstance(yield_, float) and np.isfinite(
+        yield_
+    ), f"Yield must be finite float, got {yield_}"
+    assert isinstance(melt, float) and np.isfinite(
+        melt
+    ), f"Melt must be finite float, got {melt}"
 
 
 # ---------------------------------------------------------------------------
 # Test 2: Ct value is in [15, 40]
 # ---------------------------------------------------------------------------
+
 
 def test_ct_value_range() -> None:
     """Verifies Ct value is within [15.0, 40.0] for diverse inputs."""
@@ -90,14 +112,15 @@ def test_ct_value_range() -> None:
     for seed in range(20):
         x = np.random.RandomState(seed).randn(40).astype(np.float32) * 10
         ct, _, _ = head.forward(x)
-        assert MultiTaskAmpHead.CT_MIN <= ct <= MultiTaskAmpHead.CT_MAX, (
-            f"Ct={ct:.3f} is outside [{MultiTaskAmpHead.CT_MIN}, {MultiTaskAmpHead.CT_MAX}]"
-        )
+        assert (
+            MultiTaskAmpHead.CT_MIN <= ct <= MultiTaskAmpHead.CT_MAX
+        ), f"Ct={ct:.3f} is outside [{MultiTaskAmpHead.CT_MIN}, {MultiTaskAmpHead.CT_MAX}]"
 
 
 # ---------------------------------------------------------------------------
 # Test 3: Endpoint yield is in [0, 1]
 # ---------------------------------------------------------------------------
+
 
 def test_yield_range() -> None:
     """Verifies endpoint yield is always in [0.0, 1.0]."""
@@ -112,20 +135,22 @@ def test_yield_range() -> None:
 # Test 4: Melt peak count is in [1, 6]
 # ---------------------------------------------------------------------------
 
+
 def test_melt_peaks_range() -> None:
     """Verifies melt peak count is always in [1.0, 6.0]."""
     head = make_multitask_head()
     for seed in range(20):
         x = np.random.RandomState(seed).randn(40).astype(np.float32) * 10
         _, _, melt = head.forward(x)
-        assert MultiTaskAmpHead.MELT_MIN <= melt <= MultiTaskAmpHead.MELT_MAX, (
-            f"MeltPeaks={melt:.2f} is outside [{MultiTaskAmpHead.MELT_MIN}, {MultiTaskAmpHead.MELT_MAX}]"
-        )
+        assert (
+            MultiTaskAmpHead.MELT_MIN <= melt <= MultiTaskAmpHead.MELT_MAX
+        ), f"MeltPeaks={melt:.2f} is outside [{MultiTaskAmpHead.MELT_MIN}, {MultiTaskAmpHead.MELT_MAX}]"
 
 
 # ---------------------------------------------------------------------------
 # Test 5: Analytical gradient check — trunk L1 weight W (finite differences)
 # ---------------------------------------------------------------------------
+
 
 def test_trunk_l1_gradient_numerical() -> None:
     """Verifies trunk_l1 weight gradient against finite differences.
@@ -181,6 +206,7 @@ def test_trunk_l1_gradient_numerical() -> None:
 # Test 6: Analytical gradient check — Ct output head weight W
 # ---------------------------------------------------------------------------
 
+
 def test_ct_output_head_gradient_numerical() -> None:
     """Verifies ct_out weight gradient against finite differences.
 
@@ -232,6 +258,7 @@ def test_ct_output_head_gradient_numerical() -> None:
 # Test 7: Training convergence (loss decreases over 30 epochs)
 # ---------------------------------------------------------------------------
 
+
 def test_training_convergence() -> None:
     """Verifies that training reduces the joint multi-task loss over 30 epochs.
 
@@ -248,14 +275,15 @@ def test_training_convergence() -> None:
     assert len(losses) == 30, f"Expected 30 loss values, got {len(losses)}"
     early_avg = float(np.mean(losses[:5]))
     late_avg = float(np.mean(losses[-5:]))
-    assert late_avg < early_avg, (
-        f"MultiTaskAmpHead must converge: early_avg={early_avg:.5f}, late_avg={late_avg:.5f}"
-    )
+    assert (
+        late_avg < early_avg
+    ), f"MultiTaskAmpHead must converge: early_avg={early_avg:.5f}, late_avg={late_avg:.5f}"
 
 
 # ---------------------------------------------------------------------------
 # Test 8: JSON serialization round-trip
 # ---------------------------------------------------------------------------
+
 
 def test_json_serialization_roundtrip() -> None:
     """Verifies that to_dict() / from_dict() round-trip preserves forward() exactly."""
@@ -271,14 +299,21 @@ def test_json_serialization_roundtrip() -> None:
 
     ct_after, y_after, m_after = head2.forward(x)
 
-    assert abs(ct_before - ct_after) < 1e-4, f"Ct round-trip mismatch: {ct_before} vs {ct_after}"
-    assert abs(y_before - y_after) < 1e-5, f"Yield round-trip mismatch: {y_before} vs {y_after}"
-    assert abs(m_before - m_after) < 1e-4, f"Melt round-trip mismatch: {m_before} vs {m_after}"
+    assert (
+        abs(ct_before - ct_after) < 1e-4
+    ), f"Ct round-trip mismatch: {ct_before} vs {ct_after}"
+    assert (
+        abs(y_before - y_after) < 1e-5
+    ), f"Yield round-trip mismatch: {y_before} vs {y_after}"
+    assert (
+        abs(m_before - m_after) < 1e-4
+    ), f"Melt round-trip mismatch: {m_before} vs {m_after}"
 
 
 # ---------------------------------------------------------------------------
 # Test 9: MLScorer.predict_amplification_profile() returns all 4 keys
 # ---------------------------------------------------------------------------
+
 
 def test_predict_amplification_profile_keys() -> None:
     """Verifies predict_amplification_profile() returns a dict with all 4 required keys."""
@@ -286,29 +321,32 @@ def test_predict_amplification_profile_keys() -> None:
     pair = make_primer_pair()
     profile = scorer.predict_amplification_profile(pair)
 
-    assert isinstance(profile, dict), "predict_amplification_profile() must return a dict."
+    assert isinstance(
+        profile, dict
+    ), "predict_amplification_profile() must return a dict."
     required_keys = {"ct_value", "endpoint_yield", "melt_peaks", "success_prob"}
-    assert required_keys == set(profile.keys()), (
-        f"Profile dict must have exactly keys {required_keys}, got {set(profile.keys())}"
-    )
+    assert required_keys == set(
+        profile.keys()
+    ), f"Profile dict must have exactly keys {required_keys}, got {set(profile.keys())}"
 
-    assert MultiTaskAmpHead.CT_MIN <= profile["ct_value"] <= MultiTaskAmpHead.CT_MAX, (
-        f"ct_value={profile['ct_value']} out of range"
-    )
-    assert 0.0 <= profile["endpoint_yield"] <= 1.0, (
-        f"endpoint_yield={profile['endpoint_yield']} out of range"
-    )
-    assert MultiTaskAmpHead.MELT_MIN <= profile["melt_peaks"] <= MultiTaskAmpHead.MELT_MAX, (
-        f"melt_peaks={profile['melt_peaks']} out of range"
-    )
-    assert 0.01 <= profile["success_prob"] <= 0.99, (
-        f"success_prob={profile['success_prob']} out of range"
-    )
+    assert (
+        MultiTaskAmpHead.CT_MIN <= profile["ct_value"] <= MultiTaskAmpHead.CT_MAX
+    ), f"ct_value={profile['ct_value']} out of range"
+    assert (
+        0.0 <= profile["endpoint_yield"] <= 1.0
+    ), f"endpoint_yield={profile['endpoint_yield']} out of range"
+    assert (
+        MultiTaskAmpHead.MELT_MIN <= profile["melt_peaks"] <= MultiTaskAmpHead.MELT_MAX
+    ), f"melt_peaks={profile['melt_peaks']} out of range"
+    assert (
+        0.01 <= profile["success_prob"] <= 0.99
+    ), f"success_prob={profile['success_prob']} out of range"
 
 
 # ---------------------------------------------------------------------------
 # Test 10: generate_synthetic_amp_targets() shapes and ranges
 # ---------------------------------------------------------------------------
+
 
 def test_synthetic_data_shapes_and_ranges() -> None:
     """Verifies generate_synthetic_amp_targets() produces correctly shaped and bounded data."""
@@ -320,13 +358,13 @@ def test_synthetic_data_shapes_and_ranges() -> None:
     assert Y_yield.shape == (N,), f"Yield targets should be ({N},), got {Y_yield.shape}"
     assert Y_melt.shape == (N,), f"Melt targets should be ({N},), got {Y_melt.shape}"
 
-    assert np.all(Y_ct >= MultiTaskAmpHead.CT_MIN) and np.all(Y_ct <= MultiTaskAmpHead.CT_MAX), (
-        f"Y_ct contains values outside [{MultiTaskAmpHead.CT_MIN}, {MultiTaskAmpHead.CT_MAX}]"
-    )
-    assert np.all(Y_yield >= 0.0) and np.all(Y_yield <= 1.0), (
-        "Y_yield contains values outside [0, 1]"
-    )
-    assert np.all(Y_melt >= MultiTaskAmpHead.MELT_MIN) and np.all(Y_melt <= MultiTaskAmpHead.MELT_MAX), (
-        f"Y_melt contains values outside [{MultiTaskAmpHead.MELT_MIN}, {MultiTaskAmpHead.MELT_MAX}]"
-    )
+    assert np.all(Y_ct >= MultiTaskAmpHead.CT_MIN) and np.all(
+        Y_ct <= MultiTaskAmpHead.CT_MAX
+    ), f"Y_ct contains values outside [{MultiTaskAmpHead.CT_MIN}, {MultiTaskAmpHead.CT_MAX}]"
+    assert np.all(Y_yield >= 0.0) and np.all(
+        Y_yield <= 1.0
+    ), "Y_yield contains values outside [0, 1]"
+    assert np.all(Y_melt >= MultiTaskAmpHead.MELT_MIN) and np.all(
+        Y_melt <= MultiTaskAmpHead.MELT_MAX
+    ), f"Y_melt contains values outside [{MultiTaskAmpHead.MELT_MIN}, {MultiTaskAmpHead.MELT_MAX}]"
     assert np.all(np.isfinite(X)), "Feature matrix contains NaN or Inf values"

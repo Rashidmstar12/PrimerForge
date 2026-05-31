@@ -33,6 +33,7 @@ logger = setup_logger("primerforge.ml_scorer")
 # Lazy-initialized at first call to extract_features() to avoid cost at import.
 _BIOPHYSICS_ENGINE: BiophysicsEngine | None = None
 
+
 def _get_biophysics_engine() -> BiophysicsEngine:
     """Returns the module-level BiophysicsEngine singleton (lazy init)."""
     global _BIOPHYSICS_ENGINE
@@ -43,6 +44,7 @@ def _get_biophysics_engine() -> BiophysicsEngine:
 
 # Module-level AmpliconFolder singleton for Nussinov MFE calculations.
 _AMPLICON_FOLDER: AmpliconFolder | None = None
+
 
 def _get_amplicon_folder() -> AmpliconFolder:
     """Returns the module-level AmpliconFolder singleton (lazy init)."""
@@ -77,7 +79,13 @@ class NumPyMLPRegressor:
     Uses a hidden layer with ReLU activation, trained via gradient descent.
     """
 
-    def __init__(self, input_dim: int = 32, hidden_dim: int = 16, lr: float = 0.01, epochs: int = 200) -> None:
+    def __init__(
+        self,
+        input_dim: int = 32,
+        hidden_dim: int = 16,
+        lr: float = 0.01,
+        epochs: int = 200,
+    ) -> None:
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.lr = lr
@@ -95,7 +103,7 @@ class NumPyMLPRegressor:
             "w1": self.w1.tolist(),
             "b1": self.b1.tolist(),
             "w2": self.w2.tolist(),
-            "b2": self.b2.tolist()
+            "b2": self.b2.tolist(),
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
@@ -148,11 +156,12 @@ class NumPyMLPRegressor:
 
 class PredictionResult(tuple):
     """A backwards-compatible result type for success predictions.
-    
+
     Behaves exactly like a Tuple[float, float] (probability, uncertainty_std)
     for existing unpacking and indexing, but supports key-based dictionary .get()
     lookups for Streamlit frontend integration.
     """
+
     def __new__(cls, mean: float, std: float, ci_low: float, ci_high: float):
         inst = super().__new__(cls, (mean, std))
         inst.mean = mean
@@ -192,13 +201,23 @@ class MLScorer:
 
         # Check for pre-trained DNA Transformer weights in same directory as model_path or default models/ directory
         model_dir = os.path.dirname(self.model_path) or "models"
-        pretrained_transformer_path = os.path.join(model_dir, "dna_transformer_pretrained.json")
+        pretrained_transformer_path = os.path.join(
+            model_dir, "dna_transformer_pretrained.json"
+        )
         if not os.path.exists(pretrained_transformer_path):
             pretrained_transformer_path = "models/dna_transformer_pretrained.json"
 
         self.transformer = DNATransformerEncoder(
-            vocab_size=8, embed_dim=16, num_heads=2, hidden_dim=32, max_len=24,
-            pretrained_weights_path=pretrained_transformer_path if os.path.exists(pretrained_transformer_path) else None
+            vocab_size=8,
+            embed_dim=16,
+            num_heads=2,
+            hidden_dim=32,
+            max_len=24,
+            pretrained_weights_path=(
+                pretrained_transformer_path
+                if os.path.exists(pretrained_transformer_path)
+                else None
+            ),
         )
         self.gnn = BioGNN()
         # Multi-Task Amplification Head (Step 4): Ct value, endpoint yield, melt peak count
@@ -221,7 +240,9 @@ class MLScorer:
         # Transformer Fine-Tune Classification Head (Step 3 Gap-Fill)
         # Devlin et al. 2019 BERT-style task fine-tuning on [CLS] embedding.
         # input_dim=16 matches DNATransformerEncoder embed_dim.
-        self.finetune_head = FineTuneClassificationHead(input_dim=16, hidden_dim=8, lr=1e-4)
+        self.finetune_head = FineTuneClassificationHead(
+            input_dim=16, hidden_dim=8, lr=1e-4
+        )
 
         # Resolve absolute paths and create model directories
         os.makedirs(os.path.dirname(os.path.abspath(self.model_path)), exist_ok=True)
@@ -229,10 +250,14 @@ class MLScorer:
         # Priority is loading pre-trained models
         self.load()
         if not self.models and self.model is None:
-            logger.warning(f"Model file not found at {self.model_path}. Building mock empirical database...")
+            logger.warning(
+                f"Model file not found at {self.model_path}. Building mock empirical database..."
+            )
             self.train_mvp_model()
 
-    def extract_features(self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None) -> List[float]:
+    def extract_features(
+        self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None
+    ) -> List[float]:
         """Extracts the exact 36-dimensional feature matrix from a PrimerPair.
 
         Args:
@@ -308,11 +333,13 @@ class MLScorer:
         # When full template is unavailable, concatenate as proxy for structure
         amplicon_proxy = f_seq + r_seq
         target_mfe, target_frac_paired, _ = _folder.fold(amplicon_proxy)
-        target_gc = 100.0 * sum(
-            1 for b in amplicon_proxy.upper() if b in "GC"
-        ) / len(amplicon_proxy)
+        target_gc = (
+            100.0
+            * sum(1 for b in amplicon_proxy.upper() if b in "GC")
+            / len(amplicon_proxy)
+        )
         target_len = float(pair.product_size)
-        primer_overlap = target_frac_paired   # fraction of amplicon that is base-paired
+        primer_overlap = target_frac_paired  # fraction of amplicon that is base-paired
 
         # 4. Pangenome/Variant Features (8)
         spec = spec_data or {}
@@ -327,25 +354,54 @@ class MLScorer:
         salt_monoval = float(spec.get("salt_monovalent_mm", 50.0))
         salt_dival = float(spec.get("salt_divalent_mm", 1.5))
         dntp_conc = float(spec.get("dntp_conc_mm", 0.2))
-        
+
         poly_str = spec.get("polymerase", "Standard_Taq")
         poly_map = {
             "Standard_Taq": 0.0,
             "HotStart_Taq": 1.0,
             "HighFidelity_Phusion": 2.0,
-            "Q5": 3.0
+            "Q5": 3.0,
         }
         poly_encoded = float(poly_map.get(poly_str, 0.0))
 
         # Assemble the final 36-dimensional feature matrix
         feature_vector = [
-            f_tm, r_tm, tm_diff, f_hairpin, r_hairpin, f_homodimer, r_homodimer, cross_dimer,  # 8
-            f_gc, r_gc, f_len, r_len, f_clamp_gc, r_clamp_gc, f_poly_run, r_poly_run,          # 8
-            f_3_dinuc_gc, r_3_dinuc_gc, f_3_dinuc_aa, f_3_dinuc_tt,                            # 4
-            r_3_dinuc_aa, r_3_dinuc_tt, f_3_stability, r_3_stability,                          # 4
-            target_mfe, target_gc, target_len, primer_overlap,                                 # 4
-            f_off_targets, r_off_targets, f_var_dist, r_var_dist,                              # 4
-            salt_monoval, salt_dival, dntp_conc, poly_encoded                                  # 4
+            f_tm,
+            r_tm,
+            tm_diff,
+            f_hairpin,
+            r_hairpin,
+            f_homodimer,
+            r_homodimer,
+            cross_dimer,  # 8
+            f_gc,
+            r_gc,
+            f_len,
+            r_len,
+            f_clamp_gc,
+            r_clamp_gc,
+            f_poly_run,
+            r_poly_run,  # 8
+            f_3_dinuc_gc,
+            r_3_dinuc_gc,
+            f_3_dinuc_aa,
+            f_3_dinuc_tt,  # 4
+            r_3_dinuc_aa,
+            r_3_dinuc_tt,
+            f_3_stability,
+            r_3_stability,  # 4
+            target_mfe,
+            target_gc,
+            target_len,
+            primer_overlap,  # 4
+            f_off_targets,
+            r_off_targets,
+            f_var_dist,
+            r_var_dist,  # 4
+            salt_monoval,
+            salt_dival,
+            dntp_conc,
+            poly_encoded,  # 4
         ]
 
         # Extract BioGNN features
@@ -364,7 +420,12 @@ class MLScorer:
         # Extract DNA Transformer task fine-tuned features (Step 3 Gap-Fill)
         p_transformer = 0.5
         transformer_confidence = 0.5
-        if hasattr(self, "finetune_head") and self.finetune_head is not None and hasattr(self, "transformer") and self.transformer is not None:
+        if (
+            hasattr(self, "finetune_head")
+            and self.finetune_head is not None
+            and hasattr(self, "transformer")
+            and self.transformer is not None
+        ):
             try:
                 # Forward pass for f_seq
                 cls_f = self.transformer.get_cls_embedding(f_seq)
@@ -385,10 +446,14 @@ class MLScorer:
         feature_vector.append(transformer_confidence)
 
         # Safety verification for length matching
-        assert len(feature_vector) == 40, f"Feature vector length must be 40, got {len(feature_vector)}"
+        assert (
+            len(feature_vector) == 40
+        ), f"Feature vector length must be 40, got {len(feature_vector)}"
         return feature_vector
 
-    def predict_success(self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None) -> float:
+    def predict_success(
+        self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None
+    ) -> float:
         """Predicts the probability of PCR success for a primer pair.
 
         Utilizes the calibrated stacked ensemble (LightGBM + XGBoost + MLP sequence model).
@@ -404,16 +469,28 @@ class MLScorer:
             self.models = [self.model]
 
         if not self.models:
-            logger.warning("LightGBM booster not loaded. Falling back to biophysical heuristic.")
-            penalty = pair.penalty + abs(pair.forward.tm - pair.reverse.tm) + abs(pair.cross_dimer_dg)
+            logger.warning(
+                "LightGBM booster not loaded. Falling back to biophysical heuristic."
+            )
+            penalty = (
+                pair.penalty
+                + abs(pair.forward.tm - pair.reverse.tm)
+                + abs(pair.cross_dimer_dg)
+            )
             return max(0.01, min(0.99, 1.0 - (penalty / 50.0)))
 
         try:
-            features = np.array([self.extract_features(pair, spec_data)], dtype=np.float32)
+            features = np.array(
+                [self.extract_features(pair, spec_data)], dtype=np.float32
+            )
             raw_predictions = []
 
             # 1. Reg GBDT Boosters (exclude quantile boosters)
-            reg_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) != "quantile"]
+            reg_boosters = [
+                b
+                for b in self.models
+                if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
+            ]
             if not reg_boosters:
                 reg_boosters = self.models
 
@@ -424,6 +501,7 @@ class MLScorer:
             if hasattr(self, "xgb_models") and self.xgb_models:
                 try:
                     import xgboost as xgb
+
                     dfeatures = xgb.DMatrix(features)
                     for xgb_booster in self.xgb_models:
                         raw_predictions.append(float(xgb_booster.predict(dfeatures)[0]))
@@ -431,7 +509,11 @@ class MLScorer:
                     logger.debug(f"XGBoost prediction failed: {e}")
 
             # 3. Pure-NumPy MLP sequence embedding booster
-            if hasattr(self, "mlp") and self.mlp is not None and hasattr(self.mlp, "w1"):
+            if (
+                hasattr(self, "mlp")
+                and self.mlp is not None
+                and hasattr(self.mlp, "w1")
+            ):
                 try:
                     f_emb = self.transformer.get_embeddings(pair.forward.sequence)
                     r_emb = self.transformer.get_embeddings(pair.reverse.sequence)
@@ -449,7 +531,9 @@ class MLScorer:
             logger.error(f"Ensembled success prediction failed: {e}. Running fallback.")
             return 0.5
 
-    def predict_success_with_uncertainty(self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None) -> PredictionResult:
+    def predict_success_with_uncertainty(
+        self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None
+    ) -> PredictionResult:
         """Predicts success probability and returns prediction uncertainty (standard deviation).
 
         Also computes calibrated prediction intervals combining epistemic and aleatoric uncertainty.
@@ -465,20 +549,31 @@ class MLScorer:
             self.models = [self.model]
 
         if not self.models:
-            penalty = pair.penalty + abs(pair.forward.tm - pair.reverse.tm) + abs(pair.cross_dimer_dg)
+            penalty = (
+                pair.penalty
+                + abs(pair.forward.tm - pair.reverse.tm)
+                + abs(pair.cross_dimer_dg)
+            )
             mean_pred = max(0.01, min(0.99, 1.0 - (penalty / 50.0)))
             return PredictionResult(
-                mean_pred, 0.05,
+                mean_pred,
+                0.05,
                 max(0.01, mean_pred - 0.098),
-                min(0.99, mean_pred + 0.098)
+                min(0.99, mean_pred + 0.098),
             )
 
         try:
-            features = np.array([self.extract_features(pair, spec_data)], dtype=np.float32)
+            features = np.array(
+                [self.extract_features(pair, spec_data)], dtype=np.float32
+            )
             raw_predictions = []
 
             # 1. Reg GBDT Boosters (exclude quantile boosters)
-            reg_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) != "quantile"]
+            reg_boosters = [
+                b
+                for b in self.models
+                if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
+            ]
             if not reg_boosters:
                 reg_boosters = self.models
 
@@ -489,6 +584,7 @@ class MLScorer:
             if hasattr(self, "xgb_models") and self.xgb_models:
                 try:
                     import xgboost as xgb
+
                     dfeatures = xgb.DMatrix(features)
                     for xgb_booster in self.xgb_models:
                         raw_predictions.append(float(xgb_booster.predict(dfeatures)[0]))
@@ -496,7 +592,11 @@ class MLScorer:
                     logger.debug(f"XGBoost prediction failed: {e}")
 
             # 3. MLP sequence model
-            if hasattr(self, "mlp") and self.mlp is not None and hasattr(self.mlp, "w1"):
+            if (
+                hasattr(self, "mlp")
+                and self.mlp is not None
+                and hasattr(self.mlp, "w1")
+            ):
                 try:
                     f_emb = self.transformer.get_embeddings(pair.forward.sequence)
                     r_emb = self.transformer.get_embeddings(pair.reverse.sequence)
@@ -506,19 +606,33 @@ class MLScorer:
                     logger.debug(f"MLP prediction failed: {e}")
 
             mean_raw = float(np.mean(raw_predictions))
-            calibrated_mean = 1.0 / (1.0 + np.exp(self.platt_a * mean_raw + self.platt_b))
+            calibrated_mean = 1.0 / (
+                1.0 + np.exp(self.platt_a * mean_raw + self.platt_b)
+            )
 
             # Epistemic uncertainty (ensemble discrepancy)
-            std_pred = float(np.std(raw_predictions)) if len(raw_predictions) > 1 else 0.02
+            std_pred = (
+                float(np.std(raw_predictions)) if len(raw_predictions) > 1 else 0.02
+            )
 
             # Aleatoric uncertainty (from quantile GBDT estimators)
-            quantile_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) == "quantile"]
+            quantile_boosters = [
+                b
+                for b in self.models
+                if getattr(b, "objective_type", b.params.get("objective")) == "quantile"
+            ]
             if len(quantile_boosters) >= 2:
                 q05 = float(quantile_boosters[0].predict(features)[0])
                 q95 = float(quantile_boosters[1].predict(features)[0])
                 # Platt calibrate percentiles
-                lower_bound = max(0.01, min(0.99, 1.0 / (1.0 + np.exp(self.platt_a * q05 + self.platt_b))))
-                upper_bound = max(0.01, min(0.99, 1.0 / (1.0 + np.exp(self.platt_a * q95 + self.platt_b))))
+                lower_bound = max(
+                    0.01,
+                    min(0.99, 1.0 / (1.0 + np.exp(self.platt_a * q05 + self.platt_b))),
+                )
+                upper_bound = max(
+                    0.01,
+                    min(0.99, 1.0 / (1.0 + np.exp(self.platt_a * q95 + self.platt_b))),
+                )
             else:
                 # Fallback to standard deviation boundary
                 lower_bound = max(0.01, min(0.99, calibrated_mean - 1.96 * std_pred))
@@ -527,12 +641,14 @@ class MLScorer:
             if lower_bound > upper_bound:
                 lower_bound, upper_bound = upper_bound, lower_bound
 
-            logger.debug(f"Success Probability: {calibrated_mean:.4f} [95% CI: {lower_bound:.4f} - {upper_bound:.4f}]")
+            logger.debug(
+                f"Success Probability: {calibrated_mean:.4f} [95% CI: {lower_bound:.4f} - {upper_bound:.4f}]"
+            )
             return PredictionResult(
                 max(0.01, min(0.99, calibrated_mean)),
                 max(0.01, std_pred),
                 lower_bound,
-                upper_bound
+                upper_bound,
             )
         except Exception as e:
             logger.error(f"Ensembled uncertainty prediction failed: {e}")
@@ -564,19 +680,35 @@ class MLScorer:
             self.models = [self.model]
 
         if not self.models:
-            logger.warning("LightGBM booster not loaded. Running biophysical mismatch fallback.")
-            penalty = pair.penalty + abs(pair.forward.tm - pair.reverse.tm) + abs(pair.cross_dimer_dg)
-            f_mismatch = _get_biophysics_engine().calculate_mismatch_penalty(pair.forward.sequence, f_template_site)
-            r_mismatch = _get_biophysics_engine().calculate_mismatch_penalty(pair.reverse.sequence, r_template_site)
+            logger.warning(
+                "LightGBM booster not loaded. Running biophysical mismatch fallback."
+            )
+            penalty = (
+                pair.penalty
+                + abs(pair.forward.tm - pair.reverse.tm)
+                + abs(pair.cross_dimer_dg)
+            )
+            f_mismatch = _get_biophysics_engine().calculate_mismatch_penalty(
+                pair.forward.sequence, f_template_site
+            )
+            r_mismatch = _get_biophysics_engine().calculate_mismatch_penalty(
+                pair.reverse.sequence, r_template_site
+            )
             penalty += 2.0 * (f_mismatch + r_mismatch)
             return max(0.01, min(0.99, 1.0 - (penalty / 50.0)))
 
         try:
-            features = np.array([self.extract_features(pair, spec_data)], dtype=np.float32)
+            features = np.array(
+                [self.extract_features(pair, spec_data)], dtype=np.float32
+            )
             raw_predictions = []
 
             # 1. GBDT Boosters (exclude quantile boosters)
-            reg_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) != "quantile"]
+            reg_boosters = [
+                b
+                for b in self.models
+                if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
+            ]
             if not reg_boosters:
                 reg_boosters = self.models
 
@@ -587,6 +719,7 @@ class MLScorer:
             if hasattr(self, "xgb_models") and self.xgb_models:
                 try:
                     import xgboost as xgb
+
                     dfeatures = xgb.DMatrix(features)
                     for xgb_booster in self.xgb_models:
                         raw_predictions.append(float(xgb_booster.predict(dfeatures)[0]))
@@ -594,7 +727,11 @@ class MLScorer:
                     logger.debug(f"XGBoost prediction failed: {e}")
 
             # 3. MLP sequence model
-            if hasattr(self, "mlp") and self.mlp is not None and hasattr(self.mlp, "w1"):
+            if (
+                hasattr(self, "mlp")
+                and self.mlp is not None
+                and hasattr(self.mlp, "w1")
+            ):
                 try:
                     f_emb = self.transformer.get_embeddings(pair.forward.sequence)
                     r_emb = self.transformer.get_embeddings(pair.reverse.sequence)
@@ -607,19 +744,27 @@ class MLScorer:
 
             # Compute physical thermodynamic mismatch penalties using unified parameters
             _engine = _get_biophysics_engine()
-            f_mismatch_penalty = _engine.calculate_mismatch_penalty(pair.forward.sequence, f_template_site)
-            r_mismatch_penalty = _engine.calculate_mismatch_penalty(pair.reverse.sequence, r_template_site)
+            f_mismatch_penalty = _engine.calculate_mismatch_penalty(
+                pair.forward.sequence, f_template_site
+            )
+            r_mismatch_penalty = _engine.calculate_mismatch_penalty(
+                pair.reverse.sequence, r_template_site
+            )
             total_mismatch_penalty = f_mismatch_penalty + r_mismatch_penalty
 
             # Adjust ensembled raw score based on thermodynamic destabilization
             adjusted_raw = mean_raw - total_mismatch_penalty
 
             # Apply Platt Calibration Sigmoid
-            calibrated = 1.0 / (1.0 + np.exp(self.platt_a * adjusted_raw + self.platt_b))
+            calibrated = 1.0 / (
+                1.0 + np.exp(self.platt_a * adjusted_raw + self.platt_b)
+            )
             return max(0.01, min(0.99, calibrated))
 
         except Exception as e:
-            logger.error(f"Ensembled success prediction with variant mismatches failed: {e}")
+            logger.error(
+                f"Ensembled success prediction with variant mismatches failed: {e}"
+            )
             return 0.5
 
     def predict_amplification_profile(
@@ -648,7 +793,9 @@ class MLScorer:
                 ``success_prob``   — Primary binary success probability (for cross-reference).
         """
         try:
-            features = np.array(self.extract_features(pair, spec_data), dtype=np.float32)
+            features = np.array(
+                self.extract_features(pair, spec_data), dtype=np.float32
+            )
             ct, endpoint_yield, melt_peaks = self.multitask_head.forward(features)
             success_prob = self.predict_success(pair, spec_data)
 
@@ -714,20 +861,33 @@ class MLScorer:
         # Extract feature vectors
         X_new = np.array(
             [self.extract_features(pair, spec) for pair, spec in zip(pairs, spec_list)],
-            dtype=np.float32
+            dtype=np.float32,
         )
 
-        y_success = np.array([float(o.get("success", 0.5)) for o in outcomes], dtype=np.float32)
-        y_ct      = np.array([float(o.get("ct_value", 27.5)) for o in outcomes], dtype=np.float32)
-        y_yield   = np.array([float(o.get("endpoint_yield", 0.5)) for o in outcomes], dtype=np.float32)
-        y_melt    = np.array([float(o.get("melt_peaks", 1.0)) for o in outcomes], dtype=np.float32)
+        y_success = np.array(
+            [float(o.get("success", 0.5)) for o in outcomes], dtype=np.float32
+        )
+        y_ct = np.array(
+            [float(o.get("ct_value", 27.5)) for o in outcomes], dtype=np.float32
+        )
+        y_yield = np.array(
+            [float(o.get("endpoint_yield", 0.5)) for o in outcomes], dtype=np.float32
+        )
+        y_melt = np.array(
+            [float(o.get("melt_peaks", 1.0)) for o in outcomes], dtype=np.float32
+        )
 
         # Compute raw ensemble scores for Platt recalibration
         try:
-            raw_scores = np.array([
-                float(np.mean([b.predict(X_new[i:i+1])[0] for b in self.models]))
-                for i in range(N)
-            ], dtype=np.float32)
+            raw_scores = np.array(
+                [
+                    float(
+                        np.mean([b.predict(X_new[i : i + 1])[0] for b in self.models])
+                    )
+                    for i in range(N)
+                ],
+                dtype=np.float32,
+            )
         except Exception:
             raw_scores = None
 
@@ -779,9 +939,13 @@ class MLScorer:
             local_count=local_count,
         )
         self.save()
-        logger.info(f"Federated merge complete with {len(remote_mlp_weights)} remote labs.")
+        logger.info(
+            f"Federated merge complete with {len(remote_mlp_weights)} remote labs."
+        )
 
-    def explain_prediction(self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None) -> Dict[str, float]:
+    def explain_prediction(
+        self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None
+    ) -> Dict[str, float]:
         """Computes SHAP-value feature importances for a single primer pair's prediction.
 
         Averages Shapley contributions across all GBDT regressor boosters. Falls back to a
@@ -789,24 +953,62 @@ class MLScorer:
         incompatibilities (e.g., NumPy 2.x version mismatches).
         """
         feature_cols = [
-            "f_tm", "r_tm", "tm_diff", "f_hairpin_dg", "r_hairpin_dg", "f_homodimer_dg", "r_homodimer_dg", "cross_dimer_dg",
-            "f_gc", "r_gc", "f_len", "r_len", "f_clamp_gc", "r_clamp_gc", "f_poly_run", "r_poly_run",
-            "f_3_dinuc_gc", "r_3_dinuc_gc", "f_3_dinuc_aa", "f_3_dinuc_tt",
-            "r_3_dinuc_aa", "r_3_dinuc_tt", "f_3_stability", "r_3_stability",
-            "target_mfe", "target_gc", "target_len", "primer_overlap",
-            "f_off_targets", "r_off_targets", "f_var_dist", "r_var_dist",
-            "salt_monovalent_mm", "salt_divalent_mm", "dntp_conc_mm", "polymerase_encoded",
+            "f_tm",
+            "r_tm",
+            "tm_diff",
+            "f_hairpin_dg",
+            "r_hairpin_dg",
+            "f_homodimer_dg",
+            "r_homodimer_dg",
+            "cross_dimer_dg",
+            "f_gc",
+            "r_gc",
+            "f_len",
+            "r_len",
+            "f_clamp_gc",
+            "r_clamp_gc",
+            "f_poly_run",
+            "r_poly_run",
+            "f_3_dinuc_gc",
+            "r_3_dinuc_gc",
+            "f_3_dinuc_aa",
+            "f_3_dinuc_tt",
+            "r_3_dinuc_aa",
+            "r_3_dinuc_tt",
+            "f_3_stability",
+            "r_3_stability",
+            "target_mfe",
+            "target_gc",
+            "target_len",
+            "primer_overlap",
+            "f_off_targets",
+            "r_off_targets",
+            "f_var_dist",
+            "r_var_dist",
+            "salt_monovalent_mm",
+            "salt_divalent_mm",
+            "dntp_conc_mm",
+            "polymerase_encoded",
             # GNN-derived biophysical predictions (indices 36-37) — BioGNN predicted Tm and dimer dG
-            "gnn_pred_tm", "gnn_pred_dg",
+            "gnn_pred_tm",
+            "gnn_pred_dg",
             # Transformer-derived CLS predictions (indices 38-39)
-            "transformer_p_success", "transformer_confidence"
+            "transformer_p_success",
+            "transformer_confidence",
         ]
 
         try:
             import shap
-            features = np.array([self.extract_features(pair, spec_data)], dtype=np.float32)
-            
-            reg_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) != "quantile"]
+
+            features = np.array(
+                [self.extract_features(pair, spec_data)], dtype=np.float32
+            )
+
+            reg_boosters = [
+                b
+                for b in self.models
+                if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
+            ]
             if not reg_boosters:
                 reg_boosters = self.models
 
@@ -817,13 +1019,17 @@ class MLScorer:
             for booster in reg_boosters:
                 explainer = shap.TreeExplainer(booster)
                 shap_values = explainer.shap_values(features)
-                
+
                 # Support both shap v0.45+ output formats
                 if isinstance(shap_values, list):
                     shap_val = shap_values[0][0]
-                elif isinstance(shap_values, np.ndarray) and len(shap_values.shape) == 2:
+                elif (
+                    isinstance(shap_values, np.ndarray) and len(shap_values.shape) == 2
+                ):
                     shap_val = shap_values[0]
-                elif isinstance(shap_values, np.ndarray) and len(shap_values.shape) == 3:
+                elif (
+                    isinstance(shap_values, np.ndarray) and len(shap_values.shape) == 3
+                ):
                     shap_val = shap_values[0][0]
                 else:
                     shap_val = shap_values[0][0]
@@ -833,9 +1039,13 @@ class MLScorer:
             return {col: float(val) for col, val in zip(feature_cols, mean_shap_val)}
 
         except Exception as e:
-            logger.warning(f"SHAP explanation failed due to library environment: {e}. Falling back to GBDT split-gain importance approximation.")
+            logger.warning(
+                f"SHAP explanation failed due to library environment: {e}. Falling back to GBDT split-gain importance approximation."
+            )
             try:
-                reg_boosters = [b for b in self.models if b.params.get("objective") != "quantile"]
+                reg_boosters = [
+                    b for b in self.models if b.params.get("objective") != "quantile"
+                ]
                 if not reg_boosters:
                     reg_boosters = self.models
 
@@ -844,29 +1054,42 @@ class MLScorer:
 
                 importances = []
                 for booster in reg_boosters:
-                    importances.append(booster.feature_importance(importance_type="gain"))
-                
+                    importances.append(
+                        booster.feature_importance(importance_type="gain")
+                    )
+
                 mean_importances = np.mean(importances, axis=0)
                 total_imp = np.sum(mean_importances)
                 if total_imp > 0.0:
                     mean_importances /= total_imp
-                
+
                 features = self.extract_features(pair, spec_data)
                 contributions = {}
                 # Pad or truncate mean_importances to match feature_cols length for backward-compat
                 n_feats = len(feature_cols)
                 if len(mean_importances) < n_feats:
-                    mean_importances = np.concatenate([
-                        mean_importances,
-                        np.zeros(n_feats - len(mean_importances), dtype=mean_importances.dtype)
-                    ])
+                    mean_importances = np.concatenate(
+                        [
+                            mean_importances,
+                            np.zeros(
+                                n_feats - len(mean_importances),
+                                dtype=mean_importances.dtype,
+                            ),
+                        ]
+                    )
                 elif len(mean_importances) > n_feats:
                     mean_importances = mean_importances[:n_feats]
                 for idx, col in enumerate(feature_cols):
                     val = float(mean_importances[idx])
-                    if col in ["tm_diff", "f_off_targets", "r_off_targets"] and features[idx] > 0:
+                    if (
+                        col in ["tm_diff", "f_off_targets", "r_off_targets"]
+                        and features[idx] > 0
+                    ):
                         val = -val
-                    elif col in ["cross_dimer_dg", "f_hairpin_dg", "r_hairpin_dg"] and features[idx] < -2.0:
+                    elif (
+                        col in ["cross_dimer_dg", "f_hairpin_dg", "r_hairpin_dg"]
+                        and features[idx] < -2.0
+                    ):
                         val = -val
                     contributions[col] = val
                 return contributions
@@ -877,50 +1100,104 @@ class MLScorer:
     def get_feature_importances(self) -> Dict[str, float]:
         """Computes global feature importances across all GBDT regressor boosters in the ensemble."""
         feature_cols = [
-            "f_tm", "r_tm", "tm_diff", "f_hairpin_dg", "r_hairpin_dg", "f_homodimer_dg", "r_homodimer_dg", "cross_dimer_dg",
-            "f_gc", "r_gc", "f_len", "r_len", "f_clamp_gc", "r_clamp_gc", "f_poly_run", "r_poly_run",
-            "f_3_dinuc_gc", "r_3_dinuc_gc", "f_3_dinuc_aa", "f_3_dinuc_tt",
-            "r_3_dinuc_aa", "r_3_dinuc_tt", "f_3_stability", "r_3_stability",
-            "target_mfe", "target_gc", "target_len", "primer_overlap",
-            "f_off_targets", "r_off_targets", "f_var_dist", "r_var_dist",
-            "salt_monovalent_mm", "salt_divalent_mm", "dntp_conc_mm", "polymerase_encoded",
-            "gnn_pred_tm", "gnn_pred_dg",
-            "transformer_p_success", "transformer_confidence"
+            "f_tm",
+            "r_tm",
+            "tm_diff",
+            "f_hairpin_dg",
+            "r_hairpin_dg",
+            "f_homodimer_dg",
+            "r_homodimer_dg",
+            "cross_dimer_dg",
+            "f_gc",
+            "r_gc",
+            "f_len",
+            "r_len",
+            "f_clamp_gc",
+            "r_clamp_gc",
+            "f_poly_run",
+            "r_poly_run",
+            "f_3_dinuc_gc",
+            "r_3_dinuc_gc",
+            "f_3_dinuc_aa",
+            "f_3_dinuc_tt",
+            "r_3_dinuc_aa",
+            "r_3_dinuc_tt",
+            "f_3_stability",
+            "r_3_stability",
+            "target_mfe",
+            "target_gc",
+            "target_len",
+            "primer_overlap",
+            "f_off_targets",
+            "r_off_targets",
+            "f_var_dist",
+            "r_var_dist",
+            "salt_monovalent_mm",
+            "salt_divalent_mm",
+            "dntp_conc_mm",
+            "polymerase_encoded",
+            "gnn_pred_tm",
+            "gnn_pred_dg",
+            "transformer_p_success",
+            "transformer_confidence",
         ]
-        
-        reg_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) != "quantile"]
+
+        reg_boosters = [
+            b
+            for b in self.models
+            if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
+        ]
         if not reg_boosters:
             reg_boosters = self.models
-            
+
         if not reg_boosters:
             return {col: 1.0 / len(feature_cols) for col in feature_cols}
-            
+
         try:
             importances = []
             for booster in reg_boosters:
                 importances.append(booster.feature_importance(importance_type="gain"))
-                
+
             mean_importances = np.mean(importances, axis=0)
             total_imp = np.sum(mean_importances)
             if total_imp > 0.0:
                 mean_importances /= total_imp
-                
+
             n_feats = len(feature_cols)
             if len(mean_importances) < n_feats:
-                mean_importances = np.concatenate([
-                    mean_importances,
-                    np.zeros(n_feats - len(mean_importances), dtype=mean_importances.dtype)
-                ])
+                mean_importances = np.concatenate(
+                    [
+                        mean_importances,
+                        np.zeros(
+                            n_feats - len(mean_importances),
+                            dtype=mean_importances.dtype,
+                        ),
+                    ]
+                )
             elif len(mean_importances) > n_feats:
                 mean_importances = mean_importances[:n_feats]
-                
+
             return {col: float(val) for col, val in zip(feature_cols, mean_importances)}
         except Exception:
             defaults = {
-                "f_tm": 0.08, "r_tm": 0.08, "tm_diff": 0.12, "f_hairpin_dg": 0.06, "r_hairpin_dg": 0.06,
-                "f_homodimer_dg": 0.04, "r_homodimer_dg": 0.04, "cross_dimer_dg": 0.14, "f_gc": 0.03, "r_gc": 0.03,
-                "f_len": 0.02, "r_len": 0.02, "f_clamp_gc": 0.05, "r_clamp_gc": 0.05, "f_poly_run": 0.03, "r_poly_run": 0.03,
-                "f_3_stability": 0.06, "r_3_stability": 0.06
+                "f_tm": 0.08,
+                "r_tm": 0.08,
+                "tm_diff": 0.12,
+                "f_hairpin_dg": 0.06,
+                "r_hairpin_dg": 0.06,
+                "f_homodimer_dg": 0.04,
+                "r_homodimer_dg": 0.04,
+                "cross_dimer_dg": 0.14,
+                "f_gc": 0.03,
+                "r_gc": 0.03,
+                "f_len": 0.02,
+                "r_len": 0.02,
+                "f_clamp_gc": 0.05,
+                "r_clamp_gc": 0.05,
+                "f_poly_run": 0.03,
+                "r_poly_run": 0.03,
+                "f_3_stability": 0.06,
+                "r_3_stability": 0.06,
             }
             res = {col: defaults.get(col, 0.01) for col in feature_cols}
             tot = sum(res.values())
@@ -928,7 +1205,10 @@ class MLScorer:
 
     def _add_gnn_features(self, X: np.ndarray, df_split: pd.DataFrame) -> np.ndarray:
         """Appends GNN predicted Tm and dimer free energy to the feature matrix."""
-        if "forward_seq" not in df_split.columns or "reverse_seq" not in df_split.columns:
+        if (
+            "forward_seq" not in df_split.columns
+            or "reverse_seq" not in df_split.columns
+        ):
             return np.hstack([X, np.zeros((X.shape[0], 2), dtype=np.float32)])
 
         gnn_features = []
@@ -943,53 +1223,77 @@ class MLScorer:
                 gnn_features.append([0.0, 0.0])
         return np.hstack([X, np.array(gnn_features, dtype=np.float32)])
 
-    def _add_transformer_features(self, X: np.ndarray, df_split: pd.DataFrame) -> np.ndarray:
+    def _add_transformer_features(
+        self, X: np.ndarray, df_split: pd.DataFrame
+    ) -> np.ndarray:
         """Appends transformer P_success and attention confidence to the feature matrix."""
-        if "forward_seq" not in df_split.columns or "reverse_seq" not in df_split.columns:
+        if (
+            "forward_seq" not in df_split.columns
+            or "reverse_seq" not in df_split.columns
+        ):
             return np.hstack([X, np.zeros((X.shape[0], 2), dtype=np.float32)])
 
         transformer_features = []
         for _, row in df_split.iterrows():
             f_seq = str(row["forward_seq"])
             r_seq = str(row["reverse_seq"])
-            
+
             p_transformer = 0.5
             transformer_confidence = 0.5
-            if hasattr(self, "finetune_head") and self.finetune_head is not None and hasattr(self, "transformer") and self.transformer is not None:
+            if (
+                hasattr(self, "finetune_head")
+                and self.finetune_head is not None
+                and hasattr(self, "transformer")
+                and self.transformer is not None
+            ):
                 try:
                     # Forward pass for f_seq
                     cls_f = self.transformer.get_cls_embedding(f_seq)
                     p_f = self.finetune_head.forward(cls_f, training=False)
-                    attn_f = float(np.max(self.transformer.block.attn.last_attn_weights))
+                    attn_f = float(
+                        np.max(self.transformer.block.attn.last_attn_weights)
+                    )
 
                     # Forward pass for r_seq
                     cls_r = self.transformer.get_cls_embedding(r_seq)
                     p_r = self.finetune_head.forward(cls_r, training=False)
-                    attn_r = float(np.max(self.transformer.block.attn.last_attn_weights))
+                    attn_r = float(
+                        np.max(self.transformer.block.attn.last_attn_weights)
+                    )
 
                     p_transformer = 0.5 * (p_f + p_r)
                     transformer_confidence = 0.5 * (attn_f + attn_r)
                 except Exception as e:
                     logger.debug(f"DNA Transformer CLS extraction failed: {e}")
-            
+
             transformer_features.append([p_transformer, transformer_confidence])
-            
+
         return np.hstack([X, np.array(transformer_features, dtype=np.float32)])
 
     def train_full_model(self) -> None:
         """Triggers the premium 30,000-pair database curation and GBDT model retraining."""
-        logger.info("Starting premium 30,000-pair empirical database curation and GBDT model training...")
-        
+        logger.info(
+            "Starting premium 30,000-pair empirical database curation and GBDT model training..."
+        )
+
         from primerforge.data_curation import DataCurationPipeline
 
-        pipeline = DataCurationPipeline(data_dir=os.path.dirname(self.model_path) or "data")
+        pipeline = DataCurationPipeline(
+            data_dir=os.path.dirname(self.model_path) or "data"
+        )
         df = pipeline.generate_empirical_db(n_samples=30000)
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(df)
 
         # Append GNN features
-        test_chroms = [f"chr{i}" for i in range(19, 23)] + ["chrX", "chrY", "segment_7", "segment_8"]
-        test_mask = (df["species"] == "human") & (df["chromosome"].isin(test_chroms)) | \
-                    (df["species"] == "influenza_a") & (df["chromosome"].isin(test_chroms))
+        test_chroms = [f"chr{i}" for i in range(19, 23)] + [
+            "chrX",
+            "chrY",
+            "segment_7",
+            "segment_8",
+        ]
+        test_mask = (df["species"] == "human") & (
+            df["chromosome"].isin(test_chroms)
+        ) | (df["species"] == "influenza_a") & (df["chromosome"].isin(test_chroms))
         train_df = df[~test_mask]
         test_df = df[test_mask]
 
@@ -998,7 +1302,9 @@ class MLScorer:
         X_train = self._add_transformer_features(X_train, train_df)
         X_test = self._add_transformer_features(X_test, test_df)
 
-        logger.info(f"Retraining premium LightGBM regressor booster (X_train shape: {X_train.shape})...")
+        logger.info(
+            f"Retraining premium LightGBM regressor booster (X_train shape: {X_train.shape})..."
+        )
 
         train_data = lgb.Dataset(X_train, label=y_train)
         test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
@@ -1014,7 +1320,7 @@ class MLScorer:
             "bagging_fraction": 0.8,
             "bagging_freq": 5,
             "verbosity": -1,
-            "seed": 42
+            "seed": 42,
         }
 
         self.model = lgb.train(
@@ -1022,12 +1328,14 @@ class MLScorer:
             train_data,
             num_boost_round=300,
             valid_sets=[test_data],
-            callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)]
+            callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)],
         )
 
         self.models = [self.model]
         self.save()
-        logger.info(f"Premium LightGBM model retrained successfully and saved to: {self.model_path}")
+        logger.info(
+            f"Premium LightGBM model retrained successfully and saved to: {self.model_path}"
+        )
 
     def train_mvp_model(self) -> None:
         """Generates ~2,000 highly realistic synthetic primer pairs to train the LightGBM MVP model."""
@@ -1073,10 +1381,18 @@ class MLScorer:
             target_len = float(np.random.randint(80, 200))
             primer_overlap = 0.0
 
-            f_off_targets = float(np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01]))
-            r_off_targets = float(np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01]))
-            f_var_dist = float(np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90]))
-            r_var_dist = float(np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90]))
+            f_off_targets = float(
+                np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01])
+            )
+            r_off_targets = float(
+                np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01])
+            )
+            f_var_dist = float(
+                np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90])
+            )
+            r_var_dist = float(
+                np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90])
+            )
 
             salt_mono = 50.0
             salt_div = 1.5
@@ -1084,13 +1400,42 @@ class MLScorer:
             poly_encoded = 0.0
 
             vec = [
-                f_tm, r_tm, tm_diff, f_hairpin, r_hairpin, f_homodimer, r_homodimer, cross_dimer,
-                f_gc, r_gc, f_len, r_len, f_clamp_gc, r_clamp_gc, f_poly_run, r_poly_run,
-                f_3_dinuc_gc, r_3_dinuc_gc, f_3_dinuc_aa, f_3_dinuc_tt,
-                r_3_dinuc_aa, r_3_dinuc_tt, f_3_stability, r_3_stability,
-                target_mfe, target_gc, target_len, primer_overlap,
-                f_off_targets, r_off_targets, f_var_dist, r_var_dist,
-                salt_mono, salt_div, dntp_conc, poly_encoded
+                f_tm,
+                r_tm,
+                tm_diff,
+                f_hairpin,
+                r_hairpin,
+                f_homodimer,
+                r_homodimer,
+                cross_dimer,
+                f_gc,
+                r_gc,
+                f_len,
+                r_len,
+                f_clamp_gc,
+                r_clamp_gc,
+                f_poly_run,
+                r_poly_run,
+                f_3_dinuc_gc,
+                r_3_dinuc_gc,
+                f_3_dinuc_aa,
+                f_3_dinuc_tt,
+                r_3_dinuc_aa,
+                r_3_dinuc_tt,
+                f_3_stability,
+                r_3_stability,
+                target_mfe,
+                target_gc,
+                target_len,
+                primer_overlap,
+                f_off_targets,
+                r_off_targets,
+                f_var_dist,
+                r_var_dist,
+                salt_mono,
+                salt_div,
+                dntp_conc,
+                poly_encoded,
             ]
             # Add dummy GNN and transformer features for MVP dataset backward compatibility
             vec.extend([0.0, 0.0, 0.5, 0.5])
@@ -1120,7 +1465,7 @@ class MLScorer:
             "learning_rate": 0.05,
             "num_leaves": 31,
             "verbosity": -1,
-            "seed": 42
+            "seed": 42,
         }
 
         logger.info("Fitting GBDT regressor...")
@@ -1133,37 +1478,54 @@ class MLScorer:
         self.models = [self.model]
 
         # Bootstrap-train the MultiTask Amplification Head on the same synthetic dataset
-        logger.info("Bootstrap-training MultiTaskAmpHead on synthetic amplification targets...")
-        X_mt, Y_ct, Y_yield, Y_melt = generate_synthetic_amp_targets(n=len(x_data), seed=42)
+        logger.info(
+            "Bootstrap-training MultiTaskAmpHead on synthetic amplification targets..."
+        )
+        X_mt, Y_ct, Y_yield, Y_melt = generate_synthetic_amp_targets(
+            n=len(x_data), seed=42
+        )
         # Use the existing synthetic feature matrix (already 38-dim) for alignment
         X_mt_aligned = x_arr  # x_arr is already (N, 38) with GNN dummy features
         self.multitask_head.train(
-            X_mt_aligned, Y_ct, Y_yield, Y_melt,
-            epochs=20, lr=5e-4, batch_size=64
+            X_mt_aligned, Y_ct, Y_yield, Y_melt, epochs=20, lr=5e-4, batch_size=64
         )
         logger.info("MultiTaskAmpHead bootstrap training completed.")
 
         self.save()
         logger.info(f"LightGBM MVP model trained and serialized to: {self.model_path}")
 
-    def train_hybrid_model(self, target_size: int = 10000, n_samples: int = 10000) -> None:
+    def train_hybrid_model(
+        self, target_size: int = 10000, n_samples: int = 10000
+    ) -> None:
         # Ultra ensemble now uses ONLY real public data by default (researcher-grade)
         """Loads real wet-lab empirical data and trains GBDT."""
-        logger.info("Starting premium hybrid model database curation and GBDT training...")
+        logger.info(
+            "Starting premium hybrid model database curation and GBDT training..."
+        )
 
         from primerforge.data_curation import DataCurationPipeline
 
-        pipeline = DataCurationPipeline(data_dir=os.path.dirname(self.model_path) or "data")
-        
+        pipeline = DataCurationPipeline(
+            data_dir=os.path.dirname(self.model_path) or "data"
+        )
+
         # Use prepare_hybrid_training_data() by default (which contains real public data only)
         hybrid_df = pipeline.prepare_hybrid_training_data()
 
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
 
         # Append GNN features
-        test_chroms = [f"chr{i}" for i in range(19, 23)] + ["chrX", "chrY", "segment_7", "segment_8"]
-        test_mask = (hybrid_df["species"] == "human") & (hybrid_df["chromosome"].isin(test_chroms)) | \
-                    (hybrid_df["species"] == "influenza_a") & (hybrid_df["chromosome"].isin(test_chroms))
+        test_chroms = [f"chr{i}" for i in range(19, 23)] + [
+            "chrX",
+            "chrY",
+            "segment_7",
+            "segment_8",
+        ]
+        test_mask = (hybrid_df["species"] == "human") & (
+            hybrid_df["chromosome"].isin(test_chroms)
+        ) | (hybrid_df["species"] == "influenza_a") & (
+            hybrid_df["chromosome"].isin(test_chroms)
+        )
         train_df = hybrid_df[~test_mask]
         test_df = hybrid_df[test_mask]
 
@@ -1172,7 +1534,9 @@ class MLScorer:
         X_train = self._add_transformer_features(X_train, train_df)
         X_test = self._add_transformer_features(X_test, test_df)
 
-        logger.info(f"Retraining premium LightGBM hybrid booster (X_train shape: {X_train.shape})...")
+        logger.info(
+            f"Retraining premium LightGBM hybrid booster (X_train shape: {X_train.shape})..."
+        )
 
         train_data = lgb.Dataset(X_train, label=y_train)
         test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
@@ -1188,7 +1552,7 @@ class MLScorer:
             "bagging_fraction": 0.8,
             "bagging_freq": 5,
             "verbosity": -1,
-            "seed": 42
+            "seed": 42,
         }
 
         self.model = lgb.train(
@@ -1196,22 +1560,28 @@ class MLScorer:
             train_data,
             num_boost_round=300,
             valid_sets=[test_data],
-            callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)]
+            callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)],
         )
 
         self.models = [self.model]
-        hybrid_path = os.path.join(os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_hybrid.model")
+        hybrid_path = os.path.join(
+            os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_hybrid.model"
+        )
         self.model.save_model(hybrid_path)
-        logger.info(f"Premium hybrid LightGBM model saved successfully to: {hybrid_path}")
+        logger.info(
+            f"Premium hybrid LightGBM model saved successfully to: {hybrid_path}"
+        )
 
     def save(self) -> None:
         """Serializes the trained GBDT boosters and Platt calibration / MLP parameters to disk."""
         if self.model is not None:
             self.model.save_model(self.model_path)
             logger.debug(f"LightGBM booster saved successfully to {self.model_path}")
-            
+
         # Serialize the ensembled models if they exist
-        ultra_path = os.path.join(os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_ultra")
+        ultra_path = os.path.join(
+            os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_ultra"
+        )
         for idx, booster in enumerate(self.models):
             try:
                 booster.save_model(f"{ultra_path}_{idx}.model")
@@ -1222,12 +1592,20 @@ class MLScorer:
         if hasattr(self, "xgb_models") and self.xgb_models:
             for idx, xgb_booster in enumerate(self.xgb_models):
                 try:
-                    xgb_booster.save_model(os.path.join(os.path.dirname(self.model_path) or ".", f"primerforge_xgb_{idx}.model"))
+                    xgb_booster.save_model(
+                        os.path.join(
+                            os.path.dirname(self.model_path) or ".",
+                            f"primerforge_xgb_{idx}.model",
+                        )
+                    )
                 except Exception as e:
                     logger.error(f"Failed to save XGBoost booster: {e}")
 
         # Save Platt calibration and MLP weights to JSON
-        calib_path = os.path.join(os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_ultra_calib.json")
+        calib_path = os.path.join(
+            os.path.dirname(self.model_path) or ".",
+            "primerforge_lightgbm_ultra_calib.json",
+        )
         calib_data = {
             "platt_a": self.platt_a,
             "platt_b": self.platt_b,
@@ -1258,8 +1636,11 @@ class MLScorer:
 
     def load(self) -> None:
         """Loads pre-trained ensembled boosters, Platt parameters, and MLP weights from disk."""
-        calib_path = os.path.join(os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_ultra_calib.json")
-        
+        calib_path = os.path.join(
+            os.path.dirname(self.model_path) or ".",
+            "primerforge_lightgbm_ultra_calib.json",
+        )
+
         # 1. Load Platt calibration and MLP weights
         if os.path.exists(calib_path):
             try:
@@ -1267,33 +1648,69 @@ class MLScorer:
                     calib = json.load(f)
                     self.platt_a = float(calib.get("platt_a", -1.0))
                     self.platt_b = float(calib.get("platt_b", 0.0))
-                    if "mlp_weights" in calib and hasattr(self, "mlp") and self.mlp is not None:
+                    if (
+                        "mlp_weights" in calib
+                        and hasattr(self, "mlp")
+                        and self.mlp is not None
+                    ):
                         self.mlp.from_dict(calib["mlp_weights"])
-                        logger.info("Loaded pre-trained NumPy MLP sequence embedding weights.")
-                    if "transformer_weights" in calib and hasattr(self, "transformer") and self.transformer is not None:
+                        logger.info(
+                            "Loaded pre-trained NumPy MLP sequence embedding weights."
+                        )
+                    if (
+                        "transformer_weights" in calib
+                        and hasattr(self, "transformer")
+                        and self.transformer is not None
+                    ):
                         self.transformer.from_dict(calib["transformer_weights"])
-                        logger.info("Loaded pre-trained DNA Transformer sequence embedding weights.")
-                    if "gnn_weights" in calib and hasattr(self, "gnn") and self.gnn is not None:
+                        logger.info(
+                            "Loaded pre-trained DNA Transformer sequence embedding weights."
+                        )
+                    if (
+                        "gnn_weights" in calib
+                        and hasattr(self, "gnn")
+                        and self.gnn is not None
+                    ):
                         self.gnn.from_dict(calib["gnn_weights"])
                         logger.info("Loaded pre-trained Biophysical GNN weights.")
-                    if "multitask_amp_weights" in calib and hasattr(self, "multitask_head") and self.multitask_head is not None:
+                    if (
+                        "multitask_amp_weights" in calib
+                        and hasattr(self, "multitask_head")
+                        and self.multitask_head is not None
+                    ):
                         self.multitask_head.from_dict(calib["multitask_amp_weights"])
-                        logger.info("Loaded pre-trained MultiTaskAmpHead weights (Ct, Yield, MeltPeaks).")
-                    if "continual_learner" in calib and hasattr(self, "continual_learner") and self.continual_learner is not None:
+                        logger.info(
+                            "Loaded pre-trained MultiTaskAmpHead weights (Ct, Yield, MeltPeaks)."
+                        )
+                    if (
+                        "continual_learner" in calib
+                        and hasattr(self, "continual_learner")
+                        and self.continual_learner is not None
+                    ):
                         self.continual_learner.from_dict(calib["continual_learner"])
                         # Sync calibrator to match the authoritative top-level platt_a/b
                         # (do NOT override self.platt_a/b from calibrator — top-level keys are canonical)
                         self.continual_learner.calibrator.a = self.platt_a
                         self.continual_learner.calibrator.b = self.platt_b
-                        logger.info("Loaded ContinualLearner state (EWC anchor, replay buffer, Platt calibrator).")
-                    if "finetune_head" in calib and hasattr(self, "finetune_head") and self.finetune_head is not None:
+                        logger.info(
+                            "Loaded ContinualLearner state (EWC anchor, replay buffer, Platt calibrator)."
+                        )
+                    if (
+                        "finetune_head" in calib
+                        and hasattr(self, "finetune_head")
+                        and self.finetune_head is not None
+                    ):
                         self.finetune_head.from_dict(calib["finetune_head"])
-                        logger.info("Loaded FineTuneClassificationHead weights (Step 3, Devlin 2019 BERT fine-tune).")
+                        logger.info(
+                            "Loaded FineTuneClassificationHead weights (Step 3, Devlin 2019 BERT fine-tune)."
+                        )
             except Exception as e:
                 logger.error(f"Failed to load Platt calibration JSON: {e}")
 
         # 2. Check if ensembled GBDT boosters exist at the target directory
-        ultra_path = os.path.join(os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_ultra")
+        ultra_path = os.path.join(
+            os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_ultra"
+        )
         loaded_boosters = []
         idx = 0
         while True:
@@ -1316,15 +1733,21 @@ class MLScorer:
         if loaded_boosters:
             self.models = loaded_boosters
             self.model = self.models[0]
-            logger.info(f"Loaded {len(self.models)} pre-trained LightGBM boosters from ensemble: {ultra_path}_*.model")
+            logger.info(
+                f"Loaded {len(self.models)} pre-trained LightGBM boosters from ensemble: {ultra_path}_*.model"
+            )
             return
 
         # 3. Priority for custom model paths passed directly if no ensemble exists
-        if self.model_path != "models/primerforge_lightgbm.model" and os.path.exists(self.model_path):
+        if self.model_path != "models/primerforge_lightgbm.model" and os.path.exists(
+            self.model_path
+        ):
             try:
                 self.model = lgb.Booster(model_file=self.model_path)
                 self.models = [self.model]
-                logger.info(f"Loaded custom pre-trained LightGBM model from: {self.model_path}")
+                logger.info(
+                    f"Loaded custom pre-trained LightGBM model from: {self.model_path}"
+                )
                 return
             except Exception as e:
                 logger.error(f"Failed to load custom LightGBM model: {e}")
@@ -1336,7 +1759,9 @@ class MLScorer:
             return
 
         # 4. Fall back to standard hybrid or MVP models
-        hybrid_path = os.path.join(os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_hybrid.model")
+        hybrid_path = os.path.join(
+            os.path.dirname(self.model_path) or ".", "primerforge_lightgbm_hybrid.model"
+        )
         path_to_load = hybrid_path if os.path.exists(hybrid_path) else self.model_path
         if os.path.exists(path_to_load):
             try:
@@ -1352,10 +1777,14 @@ class MLScorer:
         self.xgb_models = []
         xgb_idx = 0
         while True:
-            xgb_path = os.path.join(os.path.dirname(self.model_path) or ".", f"primerforge_xgb_{xgb_idx}.model")
+            xgb_path = os.path.join(
+                os.path.dirname(self.model_path) or ".",
+                f"primerforge_xgb_{xgb_idx}.model",
+            )
             if os.path.exists(xgb_path):
                 try:
                     import xgboost as xgb
+
                     xgb_booster = xgb.Booster()
                     xgb_booster.load_model(xgb_path)
                     self.xgb_models.append(xgb_booster)
@@ -1367,24 +1796,36 @@ class MLScorer:
         if self.xgb_models:
             logger.info(f"Loaded {len(self.xgb_models)} pre-trained XGBoost boosters.")
 
-    def train_ultra_hybrid_model(self, target_size: int = 5000, n_samples: int = 2000) -> None:
+    def train_ultra_hybrid_model(
+        self, target_size: int = 5000, n_samples: int = 2000
+    ) -> None:
         # Now uses real public data by default
         """Loads ultra-scale real data and trains GBDT boosters with multiple seeds."""
         logger.info("Starting ultra-scale ensemble database curation...")
 
         from primerforge.data_curation import DataCurationPipeline
 
-        pipeline = DataCurationPipeline(data_dir=os.path.dirname(self.model_path) or "data")
-        
+        pipeline = DataCurationPipeline(
+            data_dir=os.path.dirname(self.model_path) or "data"
+        )
+
         # Use prepare_hybrid_training_data() by default (which contains real public data only)
         hybrid_df = pipeline.prepare_hybrid_training_data()
 
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
 
         # Append GNN features
-        test_chroms = [f"chr{i}" for i in range(19, 23)] + ["chrX", "chrY", "segment_7", "segment_8"]
-        test_mask = (hybrid_df["species"] == "human") & (hybrid_df["chromosome"].isin(test_chroms)) | \
-                    (hybrid_df["species"] == "influenza_a") & (hybrid_df["chromosome"].isin(test_chroms))
+        test_chroms = [f"chr{i}" for i in range(19, 23)] + [
+            "chrX",
+            "chrY",
+            "segment_7",
+            "segment_8",
+        ]
+        test_mask = (hybrid_df["species"] == "human") & (
+            hybrid_df["chromosome"].isin(test_chroms)
+        ) | (hybrid_df["species"] == "influenza_a") & (
+            hybrid_df["chromosome"].isin(test_chroms)
+        )
         train_df = hybrid_df[~test_mask]
         test_df = hybrid_df[test_mask]
 
@@ -1393,7 +1834,9 @@ class MLScorer:
         X_train = self._add_transformer_features(X_train, train_df)
         X_test = self._add_transformer_features(X_test, test_df)
 
-        logger.info(f"Training ensembled LightGBM ultra boosters (X_train shape: {X_train.shape})...")
+        logger.info(
+            f"Training ensembled LightGBM ultra boosters (X_train shape: {X_train.shape})..."
+        )
 
         train_data = lgb.Dataset(X_train, label=y_train)
         test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
@@ -1414,27 +1857,32 @@ class MLScorer:
                 "bagging_fraction": 0.8,
                 "bagging_freq": 5,
                 "verbosity": -1,
-                "seed": seed
+                "seed": seed,
             }
             booster = lgb.train(
                 params,
                 train_data,
                 num_boost_round=300,
                 valid_sets=[test_data],
-                callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)]
+                callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)],
             )
             self.models.append(booster)
-            
-            ultra_path = os.path.join(os.path.dirname(self.model_path) or ".", f"primerforge_lightgbm_ultra_{idx}.model")
+
+            ultra_path = os.path.join(
+                os.path.dirname(self.model_path) or ".",
+                f"primerforge_lightgbm_ultra_{idx}.model",
+            )
             booster.save_model(ultra_path)
             logger.info(f"Booster {idx + 1} saved successfully to: {ultra_path}")
 
         if self.models:
             self.model = self.models[0]
-            
+
         logger.info("Ensembled LightGBM ultra model training completed successfully!")
 
-    def train_ultra_ensemble(self, target_size: int = 5000, n_samples: int = 2000) -> None:
+    def train_ultra_ensemble(
+        self, target_size: int = 5000, n_samples: int = 2000
+    ) -> None:
         # Ultra ensemble now uses ONLY real public data by default (researcher-grade)
         """Loads ultra-scale live data,
         performs ensembled training across multiple seeds and quantile parameters,
@@ -1446,24 +1894,46 @@ class MLScorer:
         from primerforge.data_curation import DataCurationPipeline
 
         # Setup paths correctly targeting same directory as self.model_path
-        pipeline = DataCurationPipeline(data_dir=os.path.dirname(self.model_path) or "data")
-        
+        pipeline = DataCurationPipeline(
+            data_dir=os.path.dirname(self.model_path) or "data"
+        )
+
         # 1. Curate live real empirical wet-lab primers
         hybrid_df = pipeline.prepare_hybrid_training_data()
 
         # Pre-train DNA Transformer
         if getattr(self.transformer, "pretrained_loaded", False):
-            logger.info("Pre-trained DNA Transformer weights loaded successfully. Optimizing MLM pre-training by running 1 warm-started epoch for local domain refinement...")
-            all_seqs = list(set(hybrid_df["forward_seq"].dropna().astype(str).tolist() + 
-                                hybrid_df["reverse_seq"].dropna().astype(str).tolist()))
-            all_seqs = [s for s in all_seqs if len(s) >= 15 and all(c in "ATGCatgc" for c in s)]
-            self.transformer.pretrain_on_sequences(all_seqs, epochs=1, batch_size=64, lr=0.001)
+            logger.info(
+                "Pre-trained DNA Transformer weights loaded successfully. Optimizing MLM pre-training by running 1 warm-started epoch for local domain refinement..."
+            )
+            all_seqs = list(
+                set(
+                    hybrid_df["forward_seq"].dropna().astype(str).tolist()
+                    + hybrid_df["reverse_seq"].dropna().astype(str).tolist()
+                )
+            )
+            all_seqs = [
+                s for s in all_seqs if len(s) >= 15 and all(c in "ATGCatgc" for c in s)
+            ]
+            self.transformer.pretrain_on_sequences(
+                all_seqs, epochs=1, batch_size=64, lr=0.001
+            )
         else:
-            logger.info("Pre-training DNA Transformer from scratch via Masked Language Modeling (MLM)...")
-            all_seqs = list(set(hybrid_df["forward_seq"].dropna().astype(str).tolist() + 
-                                hybrid_df["reverse_seq"].dropna().astype(str).tolist()))
-            all_seqs = [s for s in all_seqs if len(s) >= 15 and all(c in "ATGCatgc" for c in s)]
-            self.transformer.pretrain_on_sequences(all_seqs, epochs=8, batch_size=64, lr=0.005)
+            logger.info(
+                "Pre-training DNA Transformer from scratch via Masked Language Modeling (MLM)..."
+            )
+            all_seqs = list(
+                set(
+                    hybrid_df["forward_seq"].dropna().astype(str).tolist()
+                    + hybrid_df["reverse_seq"].dropna().astype(str).tolist()
+                )
+            )
+            all_seqs = [
+                s for s in all_seqs if len(s) >= 15 and all(c in "ATGCatgc" for c in s)
+            ]
+            self.transformer.pretrain_on_sequences(
+                all_seqs, epochs=8, batch_size=64, lr=0.005
+            )
 
         # Fine-tune DNA Transformer Classification Head (Step 3 Gap-Fill)
         logger.info("Fine-tuning DNA Transformer Classification Head...")
@@ -1476,7 +1946,9 @@ class MLScorer:
             ft_seqs.extend([f_seq, r_seq])
             ft_labels.extend([success, success])
         ft_labels = np.array(ft_labels, dtype=np.float32)
-        self.finetune_head.fine_tune(self.transformer, ft_seqs, ft_labels, epochs=10, batch_size=32)
+        self.finetune_head.fine_tune(
+            self.transformer, ft_seqs, ft_labels, epochs=10, batch_size=32
+        )
 
         # Train Biophysical Graph Neural Network (BioGNN)
         logger.info("Training Biophysical GNN on sequence complexes...")
@@ -1488,26 +1960,36 @@ class MLScorer:
             f_tm = float(row.get("f_tm", 60.0))
             r_tm = float(row.get("r_tm", 60.0))
             cross_dg = float(row.get("cross_dimer_dg", 0.0))
-            
+
             gnn_pairs.append((f_seq, r_seq))
             gnn_targets.append([0.5 * (f_tm + r_tm), cross_dg])
-            
+
         gnn_targets = np.array(gnn_targets, dtype=np.float32)
         # Train on a random representative subset of 500 pairs for 3 epochs for fast CPU convergence
         np.random.seed(42)
-        subset_indices = np.random.choice(len(gnn_pairs), min(500, len(gnn_pairs)), replace=False)
+        subset_indices = np.random.choice(
+            len(gnn_pairs), min(500, len(gnn_pairs)), replace=False
+        )
         subset_pairs = [gnn_pairs[idx] for idx in subset_indices]
         subset_targets = gnn_targets[subset_indices]
-        
+
         self.gnn.train_on_pairs(subset_pairs, subset_targets, epochs=3, lr=0.005)
 
         # 4. Partition under anti-leakage splitting protocol
         X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
 
         # Append GNN features
-        test_chroms = [f"chr{i}" for i in range(19, 23)] + ["chrX", "chrY", "segment_7", "segment_8"]
-        test_mask = (hybrid_df["species"] == "human") & (hybrid_df["chromosome"].isin(test_chroms)) | \
-                    (hybrid_df["species"] == "influenza_a") & (hybrid_df["chromosome"].isin(test_chroms))
+        test_chroms = [f"chr{i}" for i in range(19, 23)] + [
+            "chrX",
+            "chrY",
+            "segment_7",
+            "segment_8",
+        ]
+        test_mask = (hybrid_df["species"] == "human") & (
+            hybrid_df["chromosome"].isin(test_chroms)
+        ) | (hybrid_df["species"] == "influenza_a") & (
+            hybrid_df["chromosome"].isin(test_chroms)
+        )
         train_df = hybrid_df[~test_mask]
         test_df = hybrid_df[test_mask]
 
@@ -1516,7 +1998,9 @@ class MLScorer:
         X_train = self._add_transformer_features(X_train, train_df)
         X_test = self._add_transformer_features(X_test, test_df)
 
-        logger.info(f"Training ensembled LightGBM ultra boosters (X_train shape: {X_train.shape})...")
+        logger.info(
+            f"Training ensembled LightGBM ultra boosters (X_train shape: {X_train.shape})..."
+        )
 
         train_data = lgb.Dataset(X_train, label=y_train)
         test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
@@ -1527,7 +2011,9 @@ class MLScorer:
 
         # A. Fit standard regression boosters
         for idx, seed in enumerate(seeds):
-            logger.info(f"Fitting ensembled GBDT booster {idx + 1}/3 with seed={seed}...")
+            logger.info(
+                f"Fitting ensembled GBDT booster {idx + 1}/3 with seed={seed}..."
+            )
             params = {
                 "objective": "regression",
                 "metric": "l2",
@@ -1539,7 +2025,7 @@ class MLScorer:
                 "bagging_fraction": 0.8,
                 "bagging_freq": 5,
                 "verbosity": -1,
-                "seed": seed
+                "seed": seed,
             }
 
             booster = lgb.train(
@@ -1547,7 +2033,7 @@ class MLScorer:
                 train_data,
                 num_boost_round=300,
                 valid_sets=[test_data],
-                callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)]
+                callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)],
             )
             booster.objective_type = "regression"
             self.models.append(booster)
@@ -1567,14 +2053,14 @@ class MLScorer:
                 "bagging_fraction": 0.8,
                 "bagging_freq": 5,
                 "verbosity": -1,
-                "seed": 42
+                "seed": 42,
             }
             q_booster = lgb.train(
                 q_params,
                 train_data,
                 num_boost_round=300,
                 valid_sets=[test_data],
-                callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)]
+                callbacks=[lgb.early_stopping(stopping_rounds=15, verbose=False)],
             )
             q_booster.objective_type = "quantile"
             self.models.append(q_booster)
@@ -1583,6 +2069,7 @@ class MLScorer:
         self.xgb_models = []
         try:
             import xgboost as xgb
+
             logger.info("XGBoost is installed. Training XGBoost regressor booster...")
             dtrain = xgb.DMatrix(X_train, label=y_train)
             dtest = xgb.DMatrix(X_test, label=y_test)
@@ -1591,32 +2078,50 @@ class MLScorer:
                 "eval_metric": "rmse",
                 "learning_rate": 0.05,
                 "max_depth": 6,
-                "seed": 42
+                "seed": 42,
             }
-            xgb_booster = xgb.train(xgb_params, dtrain, num_boost_round=100, evals=[(dtest, "test")], early_stopping_rounds=15, verbose_eval=False)
+            xgb_booster = xgb.train(
+                xgb_params,
+                dtrain,
+                num_boost_round=100,
+                evals=[(dtest, "test")],
+                early_stopping_rounds=15,
+                verbose_eval=False,
+            )
             self.xgb_models.append(xgb_booster)
         except ImportError:
-            logger.warning("XGBoost not installed. Skipping XGBoost booster and falling back to LightGBM ensemble.")
+            logger.warning(
+                "XGBoost not installed. Skipping XGBoost booster and falling back to LightGBM ensemble."
+            )
 
         # 6. Fit NumPy MLP Sequence Embedding Model
         logger.info("Training pure NumPy MLP sequence embedding regressor...")
         # Prepare 32-dim Transformer sequence embeddings for train and test splits
         X_train_seq = []
-        for _, row in hybrid_df.iloc[:len(X_train)].iterrows():
+        for _, row in hybrid_df.iloc[: len(X_train)].iterrows():
             f_emb = self.transformer.get_embeddings(str(row["forward_seq"]))
             r_emb = self.transformer.get_embeddings(str(row["reverse_seq"]))
             X_train_seq.append(np.concatenate([f_emb, r_emb]))
         X_train_seq = np.array(X_train_seq, dtype=np.float32)
 
         self.mlp = NumPyMLPRegressor(input_dim=32, hidden_dim=16)
-        self.mlp.fit(X_train_seq, y_train.values if hasattr(y_train, "values") else np.array(y_train))
+        self.mlp.fit(
+            X_train_seq,
+            y_train.values if hasattr(y_train, "values") else np.array(y_train),
+        )
 
         # 7. Fit Platt Calibration on validation split predictions
-        logger.info("Fitting Platt Calibration curve on ensembled prediction validation split...")
+        logger.info(
+            "Fitting Platt Calibration curve on ensembled prediction validation split..."
+        )
         raw_preds = []
-        
+
         # Standard GBDT reg boosters
-        reg_boosters = [b for b in self.models if getattr(b, "objective_type", b.params.get("objective")) != "quantile"]
+        reg_boosters = [
+            b
+            for b in self.models
+            if getattr(b, "objective_type", b.params.get("objective")) != "quantile"
+        ]
         for booster in reg_boosters:
             raw_preds.append(booster.predict(X_test))
 
@@ -1624,6 +2129,7 @@ class MLScorer:
         if self.xgb_models:
             try:
                 import xgboost as xgb
+
                 dtest_xgb = xgb.DMatrix(X_test)
                 for xgb_booster in self.xgb_models:
                     raw_preds.append(xgb_booster.predict(dtest_xgb))
@@ -1632,12 +2138,12 @@ class MLScorer:
 
         # MLP Sequence booster
         X_test_seq = []
-        for _, row in hybrid_df.iloc[len(X_train):].iterrows():
+        for _, row in hybrid_df.iloc[len(X_train) :].iterrows():
             f_emb = self.transformer.get_embeddings(str(row["forward_seq"]))
             r_emb = self.transformer.get_embeddings(str(row["reverse_seq"]))
             X_test_seq.append(np.concatenate([f_emb, r_emb]))
         X_test_seq = np.array(X_test_seq, dtype=np.float32)
-        
+
         if len(X_test_seq) > 0:
             mlp_preds = self.mlp.predict(X_test_seq)
             raw_preds.append(mlp_preds)
@@ -1650,7 +2156,7 @@ class MLScorer:
         # Ensure we clamp inputs to prevent overflows
         clamped_raw_preds = np.clip(mean_raw_preds, -20.0, 20.0)
         y_test_arr = y_test.values if hasattr(y_test, "values") else np.array(y_test)
-        
+
         for _ in range(500):
             p = 1.0 / (1.0 + np.exp(A * clamped_raw_preds + B))
             grad_A = np.mean((p - y_test_arr) * clamped_raw_preds)
@@ -1660,48 +2166,58 @@ class MLScorer:
 
         self.platt_a = float(A)
         self.platt_b = float(B)
-        logger.info(f"Calibrated Platt Coefficients - platt_a: {self.platt_a:.4f}, platt_b: {self.platt_b:.4f}")
+        logger.info(
+            f"Calibrated Platt Coefficients - platt_a: {self.platt_a:.4f}, platt_b: {self.platt_b:.4f}"
+        )
 
         if self.models:
             self.model = self.models[0]
 
         # 8. Serialize all trained assets to disk
         self.save()
-        logger.info("Ensembled LightGBM ultra model training and Platt calibration completed successfully!")
+        logger.info(
+            "Ensembled LightGBM ultra model training and Platt calibration completed successfully!"
+        )
 
-    def fine_tune_on_user_data(self, df_user: pd.DataFrame, model_output_dir: str) -> Dict[str, Any]:
+    def fine_tune_on_user_data(
+        self, df_user: pd.DataFrame, model_output_dir: str
+    ) -> Dict[str, Any]:
         """Performs mathematically regularized transfer learning on GBDTs and MLP sequence net.
 
         Accepts user lab data, mixes in synthetic rehearsal anchors to prevent catastrophic
         forgetting, and fine-tunes the ensembled models. Returns comparative metrics.
         """
-        logger.info(f"Initiating ensembled transfer learning fine-tuning on user dataset (N={len(df_user)})...")
+        logger.info(
+            f"Initiating ensembled transfer learning fine-tuning on user dataset (N={len(df_user)})..."
+        )
         os.makedirs(model_output_dir, exist_ok=True)
-        
+
         # 1. Standardize primer pairs from raw user sequences
         from primerforge.biophysics import PrimerSequence, PrimerPair
         import primer3
-        
+
         user_pairs = []
         user_y = []
-        
+
         # Helper to construct PrimerPair thermodynamics on the fly
         def calc_gc(s: str) -> float:
-            return (sum(1 for b in s if b in "GC") / len(s)) * 100.0 if len(s) > 0 else 0.0
+            return (
+                (sum(1 for b in s if b in "GC") / len(s)) * 100.0 if len(s) > 0 else 0.0
+            )
 
         for _, row in df_user.iterrows():
             f_seq = str(row["forward_seq"]).upper()
             r_seq = str(row["reverse_seq"]).upper()
-            
+
             # Outcome mapping (success or Ct or efficiency)
             target = float(row.get("success", 0.95))
             user_y.append(target)
-            
+
             f_tm = primer3.calc_tm(f_seq)
             f_hairpin = primer3.calc_hairpin(f_seq).dg / 1000.0
             f_homodimer = primer3.calc_homodimer(f_seq).dg / 1000.0
             f_penalty = abs(f_tm - 60.0) + abs(len(f_seq) - 20)
-            
+
             f_seq_obj = PrimerSequence(
                 sequence=f_seq,
                 start=0,
@@ -1710,14 +2226,14 @@ class MLScorer:
                 gc_percent=calc_gc(f_seq),
                 hairpin_dg=f_hairpin,
                 homodimer_dg=f_homodimer,
-                penalty=f_penalty
+                penalty=f_penalty,
             )
-            
+
             r_tm = primer3.calc_tm(r_seq)
             r_hairpin = primer3.calc_hairpin(r_seq).dg / 1000.0
             r_homodimer = primer3.calc_homodimer(r_seq).dg / 1000.0
             r_penalty = abs(r_tm - 60.0) + abs(len(r_seq) - 20)
-            
+
             r_seq_obj = PrimerSequence(
                 sequence=r_seq,
                 start=100,
@@ -1726,19 +2242,19 @@ class MLScorer:
                 gc_percent=calc_gc(r_seq),
                 hairpin_dg=r_hairpin,
                 homodimer_dg=r_homodimer,
-                penalty=r_penalty
+                penalty=r_penalty,
             )
-            
+
             cross_dimer = primer3.calc_heterodimer(f_seq, r_seq).dg / 1000.0
-            
+
             pair = PrimerPair(
                 forward=f_seq_obj,
                 reverse=r_seq_obj,
                 product_size=int(row.get("product_size", 150)),
                 cross_dimer_dg=cross_dimer,
-                penalty=f_penalty + r_penalty + abs(f_tm - r_tm)
+                penalty=f_penalty + r_penalty + abs(f_tm - r_tm),
             )
-            
+
             spec_data = {
                 "f_off_targets": float(row.get("f_off_targets", 0.0)),
                 "r_off_targets": float(row.get("r_off_targets", 0.0)),
@@ -1747,13 +2263,15 @@ class MLScorer:
                 "salt_monovalent_mm": float(row.get("salt_monovalent_mm", 50.0)),
                 "salt_divalent_mm": float(row.get("salt_divalent_mm", 1.5)),
                 "dntp_conc_mm": float(row.get("dntp_conc_mm", 0.2)),
-                "polymerase": str(row.get("polymerase", "Standard_Taq"))
+                "polymerase": str(row.get("polymerase", "Standard_Taq")),
             }
-            
+
             user_pairs.append((pair, spec_data))
 
         user_y = np.array(user_y, dtype=np.float32)
-        user_x = np.array([self.extract_features(p, s) for p, s in user_pairs], dtype=np.float32)
+        user_x = np.array(
+            [self.extract_features(p, s) for p, s in user_pairs], dtype=np.float32
+        )
 
         # 2. Before Fine-Tuning Performance Assessment
         y_pred_before = []
@@ -1763,7 +2281,7 @@ class MLScorer:
 
         # Calculate comparative classification statistics (threshold = 0.5)
         user_labels = (user_y >= 0.50).astype(int)
-        
+
         def calc_metrics(y_true, y_prob):
             brier = float(np.mean((y_true - y_prob) ** 2))
             # ECE
@@ -1798,7 +2316,7 @@ class MLScorer:
 
                 tpr = tps / tps[-1] if tps[-1] > 0 else np.zeros_like(tps)
                 fpr = fps / fps[-1] if fps[-1] > 0 else np.zeros_like(fps)
-                
+
                 try:
                     roc_auc = float(np.trapezoid(tpr, fpr))
                 except AttributeError:
@@ -1815,7 +2333,7 @@ class MLScorer:
                 "Brier": brier,
                 "ECE": float(ece),
                 "ROC_AUC": float(roc_auc),
-                "F1": float(f1)
+                "F1": float(f1),
             }
 
         metrics_before = calc_metrics(user_labels, y_pred_before)
@@ -1832,25 +2350,57 @@ class MLScorer:
             f_hairpin = -np.random.exponential(1.0)
             r_hairpin = -np.random.exponential(1.0)
             cross_dimer = -np.random.exponential(1.5)
-            
+
             f_gc = np.random.normal(50.0, 4.0)
             r_gc = np.random.normal(50.0, 4.0)
             f_len = float(np.random.randint(18, 23))
             r_len = float(np.random.randint(18, 23))
             f_clamp = float(np.random.randint(1, 4))
             r_clamp = float(np.random.randint(1, 4))
-            
+
             vec = [
-                f_tm, r_tm, tm_diff, f_hairpin, r_hairpin, -0.5, -0.5, cross_dimer,
-                f_gc, r_gc, f_len, r_len, f_clamp, r_clamp, 1.0, 1.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 1.5,
-                -5.0, 45.0, 150.0, 0.0,
-                0.0, 0.0, 20.0, 20.0,
-                50.0, 1.5, 0.2, 0.0
+                f_tm,
+                r_tm,
+                tm_diff,
+                f_hairpin,
+                r_hairpin,
+                -0.5,
+                -0.5,
+                cross_dimer,
+                f_gc,
+                r_gc,
+                f_len,
+                r_len,
+                f_clamp,
+                r_clamp,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.5,
+                1.5,
+                -5.0,
+                45.0,
+                150.0,
+                0.0,
+                0.0,
+                0.0,
+                20.0,
+                20.0,
+                50.0,
+                1.5,
+                0.2,
+                0.0,
             ]
             vec.extend([0.0, 0.0, 0.5, 0.5])
             anchor_x.append(vec)
-            anchor_y.append(max(0.01, min(0.99, 0.95 - 0.05 * tm_diff + np.random.normal(0, 0.01))))
+            anchor_y.append(
+                max(0.01, min(0.99, 0.95 - 0.05 * tm_diff + np.random.normal(0, 0.01)))
+            )
 
         anchor_x = np.array(anchor_x, dtype=np.float32)
         anchor_y = np.array(anchor_y, dtype=np.float32)
@@ -1860,9 +2410,11 @@ class MLScorer:
         y_train_ft = np.concatenate([user_y, anchor_y], axis=0)
 
         # 4. GBDT Stacked Booster Fine-Tuning
-        logger.info("Performing ensembled GBDT booster fine-tuning via rehearsal-based training...")
+        logger.info(
+            "Performing ensembled GBDT booster fine-tuning via rehearsal-based training..."
+        )
         ft_dataset = lgb.Dataset(X_train_ft, label=y_train_ft)
-        
+
         new_models = []
         for idx, booster in enumerate(self.models):
             # Fit fresh regression or quantile model on the combined user + anchor dataset
@@ -1871,14 +2423,14 @@ class MLScorer:
                 "num_leaves": 31,
                 "reg_lambda": 5.0,
                 "verbosity": -1,
-                "seed": 42 + idx
+                "seed": 42 + idx,
             }
-            
+
             # Determine objective and quantile alpha based on the original booster's objective type
             obj_type = getattr(booster, "objective_type", None)
             if obj_type is None and hasattr(booster, "params"):
                 obj_type = booster.params.get("objective")
-                
+
             if obj_type == "quantile":
                 ft_params["objective"] = "quantile"
                 # If we cannot read original alpha, default to 0.05 for index 3, and 0.95 for index 4
@@ -1886,27 +2438,31 @@ class MLScorer:
             else:
                 ft_params["objective"] = "regression"
                 ft_params["metric"] = "l2"
-                
+
             updated_bst = lgb.train(
                 ft_params,
                 ft_dataset,
                 num_boost_round=100,
             )
-            updated_bst.objective_type = "quantile" if ft_params["objective"] == "quantile" else "regression"
+            updated_bst.objective_type = (
+                "quantile" if ft_params["objective"] == "quantile" else "regression"
+            )
             new_models.append(updated_bst)
-            
+
         self.models = new_models
 
         # 5. MLP Sequence Embedding Head Transfer Learning via EWC
         if hasattr(self, "mlp") and self.mlp is not None and hasattr(self.mlp, "w1"):
-            logger.info("Performing EWC-regularized MLP classification head adaptation...")
+            logger.info(
+                "Performing EWC-regularized MLP classification head adaptation..."
+            )
             # Extract 32-dim Transformer sequence embeddings
             X_seq_ft = []
             for pair, _ in user_pairs:
                 f_emb = self.transformer.get_embeddings(pair.forward.sequence)
                 r_emb = self.transformer.get_embeddings(pair.reverse.sequence)
                 X_seq_ft.append(np.concatenate([f_emb, r_emb]))
-                
+
             # Synthesize anchor sequences to avoid catastrophic forgetting in MLP
             for _ in range(100):
                 bases = "ATGC"
@@ -1915,48 +2471,56 @@ class MLScorer:
                 f_emb = self.transformer.get_embeddings(f_seq)
                 r_emb = self.transformer.get_embeddings(r_seq)
                 X_seq_ft.append(np.concatenate([f_emb, r_emb]))
-                
+
             X_seq_ft = np.array(X_seq_ft, dtype=np.float32)
             y_seq_ft = np.concatenate([user_y, anchor_y[:100]])
-            
+
             # Elastic weight anchoring to initial weights
             w2_old = self.mlp.w2.copy()
             b2_old = self.mlp.b2.copy()
             lambda_anchor = 2.0
             lr_ft = 0.01
-            
+
             # Freeze self.mlp.w1 and self.mlp.b1, only backprop through w2 and b2
             for _ in range(100):
                 z1 = np.dot(X_seq_ft, self.mlp.w1) + self.mlp.b1
                 a1 = np.maximum(0.0, z1)
                 z2 = np.dot(a1, self.mlp.w2) + self.mlp.b2
-                
+
                 dz2 = z2 - y_seq_ft.reshape(-1, 1)
-                dw2 = np.dot(a1.T, dz2) / X_seq_ft.shape[0] + lambda_anchor * (self.mlp.w2 - w2_old)
-                db2 = np.mean(dz2, axis=0, keepdims=True) + lambda_anchor * (self.mlp.b2 - b2_old)
-                
+                dw2 = np.dot(a1.T, dz2) / X_seq_ft.shape[0] + lambda_anchor * (
+                    self.mlp.w2 - w2_old
+                )
+                db2 = np.mean(dz2, axis=0, keepdims=True) + lambda_anchor * (
+                    self.mlp.b2 - b2_old
+                )
+
                 # Clip gradients for numerical stability
                 np.clip(dw2, -1.0, 1.0, out=dw2)
                 np.clip(db2, -1.0, 1.0, out=db2)
-                
+
                 self.mlp.w2 -= lr_ft * dw2
                 self.mlp.b2 -= lr_ft * db2
 
         # 6. Re-calibrate Platt Parameters on Out-of-fold Rehearsal predictions
         logger.info("Recalibrating Platt coefficients...")
         raw_preds = []
-        reg_boosters = [b for b in self.models if getattr(b, "objective_type", None) != "quantile"]
+        reg_boosters = [
+            b for b in self.models if getattr(b, "objective_type", None) != "quantile"
+        ]
         for b in reg_boosters:
             raw_preds.append(b.predict(X_train_ft))
-            
+
         if hasattr(self, "mlp") and self.mlp is not None:
             mlp_preds = self.mlp.predict(X_seq_ft)
             # Replicate to match X_train_ft size
-            mlp_padded = np.pad(mlp_preds, (0, len(X_train_ft) - len(mlp_preds)), mode='edge')
+            mlp_padded = np.pad(
+                mlp_preds, (0, len(X_train_ft) - len(mlp_preds)), mode="edge"
+            )
             raw_preds.append(mlp_padded)
-            
+
         mean_raw = np.mean(raw_preds, axis=0)
-        
+
         # Optimize Platt parameters
         A, B = self.platt_a, self.platt_b
         lr = 0.05
@@ -1967,10 +2531,12 @@ class MLScorer:
             grad_B = np.mean(p - y_train_ft)
             A += lr * grad_A
             B += lr * grad_B
-            
+
         self.platt_a = float(A)
         self.platt_b = float(B)
-        logger.info(f"Fine-tuned Platt Coefficients - platt_a: {self.platt_a:.4f}, platt_b: {self.platt_b:.4f}")
+        logger.info(
+            f"Fine-tuned Platt Coefficients - platt_a: {self.platt_a:.4f}, platt_b: {self.platt_b:.4f}"
+        )
 
         if self.models:
             self.model = self.models[0]
@@ -1999,16 +2565,16 @@ class MLScorer:
                 "roc_auc": metrics_before["ROC_AUC"],
                 "brier_score": metrics_before["Brier"],
                 "ece": metrics_before["ECE"],
-                "f1": metrics_before["F1"]
+                "f1": metrics_before["F1"],
             },
             "after": {
                 "roc_auc": metrics_after["ROC_AUC"],
                 "brier_score": metrics_after["Brier"],
                 "ece": metrics_after["ECE"],
-                "f1": metrics_after["F1"]
+                "f1": metrics_after["F1"],
             },
             "platt_a": self.platt_a,
-            "platt_b": self.platt_b
+            "platt_b": self.platt_b,
         }
 
     def train_on_hybrid_data(self) -> Dict[str, Any]:
@@ -2031,7 +2597,7 @@ class MLScorer:
             "learning_rate": 0.05,
             "num_leaves": 31,
             "verbosity": -1,
-            "seed": 42
+            "seed": 42,
         }
 
         self.model = lgb.train(
@@ -2042,7 +2608,9 @@ class MLScorer:
         self.models = [self.model]
         self.save()
 
-        logger.info(f"Successfully retrained model on hybrid data. Saved to {self.model_path}.")
+        logger.info(
+            f"Successfully retrained model on hybrid data. Saved to {self.model_path}."
+        )
         return {"rows_trained": int(X_train.shape[0])}
 
     def retrain_with_public_real_data(self) -> Dict[str, Any]:
@@ -2052,6 +2620,7 @@ class MLScorer:
             Dict[str, Any]: Statistics containing number of training samples.
         """
         from primerforge.data_curation import DataCurationPipeline
+
         pipeline = DataCurationPipeline()
         df = pipeline.prepare_hybrid_training_data()
         return self.train_on_hybrid_data()
@@ -2059,19 +2628,19 @@ class MLScorer:
 
 if __name__ == "__main__":
     from primerforge.data_curation import DataCurationPipeline
-    
+
     # Create DataCurationPipeline + MLScorer
     pipeline = DataCurationPipeline()
     scorer = MLScorer()
-    
+
     print("Testing retrain_with_public_real_data()...")
     res = scorer.retrain_with_public_real_data()
-    
+
     # Load the curated database to count records
     df = pipeline.prepare_hybrid_training_data()
     real_count = df[df["source_db"].isin(["rtprimerdb", "primerbank"])].shape[0]
     synth_count = df[~df["source_db"].isin(["rtprimerdb", "primerbank"])].shape[0]
-    
+
     print(f"Number of real records used: {real_count}")
     print(f"Number of synthetic records used (should be 0): {synth_count}")
     print("Real public data pipeline is now the default and clean!")
@@ -2080,4 +2649,3 @@ if __name__ == "__main__":
     print("Testing train_ultra_ensemble()...")
     scorer.train_ultra_ensemble()
     print("Ultra ensemble training with real public data completed successfully!")
-

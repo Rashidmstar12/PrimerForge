@@ -152,10 +152,22 @@ scratch/
 .system_generated/
 *.log
 
-# Manuscripts and publication packages
-BIORXIV_MANUSCRIPT.md
-primerforge_biorxiv_package.zip
-publication_outline.md
+# Academic Manuscripts, Preprints, Word, and PDF Drafts (Recursive)
+*.docx
+*.pdf
+*biorxiv*
+*manuscript*
+*preprint*
+*methodology*
+*supplementary*
+*publication*
+CITATION.cff
+
+# Paper/Preprint and Publication Generation Scripts
+make_publication_package.py
+benchmark.py
+benchmark_external.py
+benchmark_rigorous.py
 publication_package/
 
 

@@ -36,6 +36,7 @@ logger = setup_logger("primerforge.secondary_structure")
 # Turner 2004 DNA Nearest-Neighbour Stacking Parameters
 # ---------------------------------------------------------------------------
 
+
 class NNStackingParams:
     """Turner 2004 DNA nearest-neighbour stacking parameters.
 
@@ -129,12 +130,13 @@ class NNStackingParams:
         # Single pair initiation: use mean of AT/GC initiation ΔG
         if b1 in ("A", "T"):
             return -0.73  # AT pair initiation (SantaLucia 1998)
-        return -1.82   # GC pair initiation (SantaLucia 1998)
+        return -1.82  # GC pair initiation (SantaLucia 1998)
 
 
 # ---------------------------------------------------------------------------
 # Nussinov MFE Dynamic Programming
 # ---------------------------------------------------------------------------
+
 
 class NussinovMFE:
     """Nussinov (1980) DP with Turner 2004 NN stacking energies for MFE.
@@ -178,9 +180,11 @@ class NussinovMFE:
         # DNA sanitization & hard complexity cap (300 bp)
         seq_clean = "".join(c for c in sequence.upper() if c in "ATGC")
         if len(seq_clean) > 300:
-            logger.warning(f"Sequence length ({len(seq_clean)}) exceeds 300 bp. Truncating to 300 bp to avoid O(N³) complexity.")
+            logger.warning(
+                f"Sequence length ({len(seq_clean)}) exceeds 300 bp. Truncating to 300 bp to avoid O(N³) complexity."
+            )
             seq_clean = seq_clean[:300]
-            
+
         seq = seq_clean
         N = len(seq)
 
@@ -210,7 +214,9 @@ class NussinovMFE:
                     # Stacking bonus: if inner pair (i+1, j-1) is also valid,
                     # add NN stacking energy of the dinucleotide seq[i]seq[i+1]
                     stacking = 0.0
-                    if (i + 1 < j) and self._params.pair_energy(seq[i + 1], seq[j - 1]) < 0.0:
+                    if (i + 1 < j) and self._params.pair_energy(
+                        seq[i + 1], seq[j - 1]
+                    ) < 0.0:
                         stacking = self._params.get_stack_dg(seq[i], seq[i + 1])
 
                     pair_score = e_pair + stacking + inner
@@ -244,25 +250,27 @@ class NussinovMFE:
             # Calculate values for each possible transition to find the closest matching one
             # to handle potential floating-point representation discrepancy.
             choices = []
-            
+
             # Choice 0: i unpaired
             v0 = S[i + 1][j] if i + 1 <= j else 0.0
             choices.append((abs(S[i][j] - v0), "unpaired_i", (i + 1, j)))
-            
+
             # Choice 1: j unpaired
             v1 = S[i][j - 1] if i <= j - 1 else 0.0
             choices.append((abs(S[i][j] - v1), "unpaired_j", (i, j - 1)))
-            
+
             # Choice 2: i and j pair
             e_pair = self._params.pair_energy(seq[i], seq[j])
             if e_pair < 0.0:
                 inner = S[i + 1][j - 1] if i + 1 <= j - 1 else 0.0
                 stacking = 0.0
-                if (i + 1 < j) and self._params.pair_energy(seq[i + 1], seq[j - 1]) < 0.0:
+                if (i + 1 < j) and self._params.pair_energy(
+                    seq[i + 1], seq[j - 1]
+                ) < 0.0:
                     stacking = self._params.get_stack_dg(seq[i], seq[i + 1])
                 v2 = e_pair + stacking + inner
                 choices.append((abs(S[i][j] - v2), "pair", (i + 1, j - 1)))
-            
+
             # Choice 3: bifurcation split
             best_k = None
             min_k_diff = self.INFINITY
@@ -273,12 +281,12 @@ class NussinovMFE:
                     best_k = k
             if best_k is not None:
                 choices.append((min_k_diff, "bifurcation", (best_k,)))
-                
+
             # Pick the choice with the minimum difference
             choices.sort(key=lambda x: x[0])
             best_choice = choices[0]
             diff, action, payload = best_choice
-            
+
             if action == "unpaired_i":
                 stack.append(payload)
             elif action == "unpaired_j":
@@ -299,6 +307,7 @@ class NussinovMFE:
 # ---------------------------------------------------------------------------
 # AmpliconFolder — public API
 # ---------------------------------------------------------------------------
+
 
 class AmpliconFolder:
     """Computes amplicon secondary structure metrics for PCR prediction.

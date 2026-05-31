@@ -60,6 +60,7 @@ logger = setup_logger("primerforge.continual_learner")
 # 1. Fisher Information Estimator
 # ---------------------------------------------------------------------------
 
+
 class FisherInformationEstimator:
     """Estimates the diagonal of the empirical Fisher Information Matrix.
 
@@ -129,27 +130,29 @@ class FisherInformationEstimator:
 
             # ── MLP Fisher: MSE loss w.r.t. w1, b1, w2, b2 ──────────
             # Handle 2D biases: b1=(1,hidden), b2=(1,1) → flatten for scalar ops
-            w2_flat = mlp.w2.flatten()          # (hidden,)
-            b1_flat = mlp.b1.flatten()          # (hidden,)
+            w2_flat = mlp.w2.flatten()  # (hidden,)
+            b1_flat = mlp.b1.flatten()  # (hidden,)
             b2_scalar = float(mlp.b2.flatten()[0])
-            x_mlp = x_i[:mlp.w1.shape[0]]      # MLP uses first 32 features
+            x_mlp = x_i[: mlp.w1.shape[0]]  # MLP uses first 32 features
 
-            pre_h = x_mlp @ mlp.w1 + b1_flat   # (hidden,)
-            h = np.maximum(0.0, pre_h)          # (hidden,)
+            pre_h = x_mlp @ mlp.w1 + b1_flat  # (hidden,)
+            h = np.maximum(0.0, pre_h)  # (hidden,)
             pred = float(np.dot(h, w2_flat) + b2_scalar)
 
             d_loss = 2.0 * (pred - y_i)
-            dw2 = d_loss * h                    # (hidden,)
+            dw2 = d_loss * h  # (hidden,)
             db2 = np.array([d_loss])
-            dh = d_loss * w2_flat               # (hidden,)
+            dh = d_loss * w2_flat  # (hidden,)
             dh_pre = dh * (pre_h > 0)
             dw1 = np.outer(x_mlp, dh_pre)
             db1 = dh_pre
 
-            fisher_w1 += dw1 ** 2
+            fisher_w1 += dw1**2
             fisher_b1 += db1.reshape(mlp.b1.shape) ** 2
-            fisher_w2 += (dw2.reshape(mlp.w2.shape)) ** 2   # reshape (hidden,) → (hidden,1)
-            fisher_b2 += db2 ** 2
+            fisher_w2 += (
+                dw2.reshape(mlp.w2.shape)
+            ) ** 2  # reshape (hidden,) → (hidden,1)
+            fisher_b2 += db2**2
 
             # ── MultiTaskAmpHead Fisher: from multitask loss ──────────
             if y_ct is not None and y_yield is not None and y_melt is not None:
@@ -178,7 +181,7 @@ class FisherInformationEstimator:
         self.fisher_mt = {
             "trunk_l1_W": (fisher_tl1W / N).astype(np.float32),
             "trunk_l2_W": (fisher_tl2W / N).astype(np.float32),
-            "ct_out_W":   (fisher_ctW / N).astype(np.float32),
+            "ct_out_W": (fisher_ctW / N).astype(np.float32),
             "yield_out_W": (fisher_yyW / N).astype(np.float32),
             "melt_out_W": (fisher_mmW / N).astype(np.float32),
         }
@@ -188,18 +191,25 @@ class FisherInformationEstimator:
         return {
             "n_samples": self.n_samples,
             "fisher_mlp": {k: v.tolist() for k, v in self.fisher_mlp.items()},
-            "fisher_mt":  {k: v.tolist() for k, v in self.fisher_mt.items()},
+            "fisher_mt": {k: v.tolist() for k, v in self.fisher_mt.items()},
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
         self.n_samples = int(data.get("n_samples", 0))
-        self.fisher_mlp = {k: np.array(v, dtype=np.float32) for k, v in data.get("fisher_mlp", {}).items()}
-        self.fisher_mt  = {k: np.array(v, dtype=np.float32) for k, v in data.get("fisher_mt", {}).items()}
+        self.fisher_mlp = {
+            k: np.array(v, dtype=np.float32)
+            for k, v in data.get("fisher_mlp", {}).items()
+        }
+        self.fisher_mt = {
+            k: np.array(v, dtype=np.float32)
+            for k, v in data.get("fisher_mt", {}).items()
+        }
 
 
 # ---------------------------------------------------------------------------
 # 2. Elastic Weight Consolidation
 # ---------------------------------------------------------------------------
+
 
 class ElasticWeightConsolidation:
     """Prevents catastrophic forgetting via Fisher-weighted parameter anchoring.
@@ -253,7 +263,7 @@ class ElasticWeightConsolidation:
         self.anchor_mt = {
             "trunk_l1_W": multitask_head.trunk_l1.W.copy(),
             "trunk_l2_W": multitask_head.trunk_l2.W.copy(),
-            "ct_out_W":   multitask_head.ct_out.W.copy(),
+            "ct_out_W": multitask_head.ct_out.W.copy(),
             "yield_out_W": multitask_head.yield_out.W.copy(),
             "melt_out_W": multitask_head.melt_out.W.copy(),
         }
@@ -287,7 +297,7 @@ class ElasticWeightConsolidation:
         mt_params = {
             "trunk_l1_W": multitask_head.trunk_l1.W,
             "trunk_l2_W": multitask_head.trunk_l2.W,
-            "ct_out_W":   multitask_head.ct_out.W,
+            "ct_out_W": multitask_head.ct_out.W,
             "yield_out_W": multitask_head.yield_out.W,
             "melt_out_W": multitask_head.melt_out.W,
         }
@@ -328,7 +338,7 @@ class ElasticWeightConsolidation:
         mt_params = {
             "trunk_l1_W": multitask_head.trunk_l1.W,
             "trunk_l2_W": multitask_head.trunk_l2.W,
-            "ct_out_W":   multitask_head.ct_out.W,
+            "ct_out_W": multitask_head.ct_out.W,
             "yield_out_W": multitask_head.yield_out.W,
             "melt_out_W": multitask_head.melt_out.W,
         }
@@ -345,21 +355,28 @@ class ElasticWeightConsolidation:
             "lambda_ewc": self.lambda_ewc,
             "_anchored": self._anchored,
             "anchor_mlp": {k: v.tolist() for k, v in self.anchor_mlp.items()},
-            "anchor_mt":  {k: v.tolist() for k, v in self.anchor_mt.items()},
+            "anchor_mt": {k: v.tolist() for k, v in self.anchor_mt.items()},
             "fisher": self.fisher.to_dict(),
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
         self.lambda_ewc = float(data.get("lambda_ewc", 500.0))
         self._anchored = bool(data.get("_anchored", False))
-        self.anchor_mlp = {k: np.array(v, dtype=np.float32) for k, v in data.get("anchor_mlp", {}).items()}
-        self.anchor_mt  = {k: np.array(v, dtype=np.float32) for k, v in data.get("anchor_mt", {}).items()}
+        self.anchor_mlp = {
+            k: np.array(v, dtype=np.float32)
+            for k, v in data.get("anchor_mlp", {}).items()
+        }
+        self.anchor_mt = {
+            k: np.array(v, dtype=np.float32)
+            for k, v in data.get("anchor_mt", {}).items()
+        }
         self.fisher.from_dict(data.get("fisher", {}))
 
 
 # ---------------------------------------------------------------------------
 # 3. Experience Replay Buffer
 # ---------------------------------------------------------------------------
+
 
 class ExperienceReplayBuffer:
     """Fixed-capacity ring buffer with reservoir sampling (Vitter's Algorithm R).
@@ -443,9 +460,17 @@ class ExperienceReplayBuffer:
             y_melt:    Melt targets (N,).
         """
         for i in range(len(X)):
-            self.add(X[i], float(y_success[i]), float(y_ct[i]), float(y_yield[i]), float(y_melt[i]))
+            self.add(
+                X[i],
+                float(y_success[i]),
+                float(y_ct[i]),
+                float(y_yield[i]),
+                float(y_melt[i]),
+            )
 
-    def sample(self, n: int) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    def sample(
+        self, n: int
+    ) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
         """Samples a random mini-batch from the buffer.
 
         Args:
@@ -462,10 +487,10 @@ class ExperienceReplayBuffer:
         idx = self._rng.choice(len(buf), size=n_actual, replace=(n > len(buf)))
         selected = [buf[i] for i in idx]
 
-        X      = np.array([s[0] for s in selected], dtype=np.float32)
+        X = np.array([s[0] for s in selected], dtype=np.float32)
         y_succ = np.array([s[1] for s in selected], dtype=np.float32)
-        y_ct   = np.array([s[2] for s in selected], dtype=np.float32)
-        y_yld  = np.array([s[3] for s in selected], dtype=np.float32)
+        y_ct = np.array([s[2] for s in selected], dtype=np.float32)
+        y_yld = np.array([s[3] for s in selected], dtype=np.float32)
         y_melt = np.array([s[4] for s in selected], dtype=np.float32)
         return X, y_succ, y_ct, y_yld, y_melt
 
@@ -477,35 +502,38 @@ class ExperienceReplayBuffer:
         return {
             "capacity": self.capacity,
             "n_seen": self.n_seen,
-            "buffer_X":       [e[0].tolist() for e in buf],
+            "buffer_X": [e[0].tolist() for e in buf],
             "buffer_success": [e[1] for e in buf],
-            "buffer_ct":      [e[2] for e in buf],
-            "buffer_yield":   [e[3] for e in buf],
-            "buffer_melt":    [e[4] for e in buf],
+            "buffer_ct": [e[2] for e in buf],
+            "buffer_yield": [e[3] for e in buf],
+            "buffer_melt": [e[4] for e in buf],
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
         self.capacity = int(data.get("capacity", 1000))
-        self.n_seen   = int(data.get("n_seen", 0))
-        self._buffer  = deque(maxlen=self.capacity)
-        xs     = data.get("buffer_X", [])
-        succs  = data.get("buffer_success", [])
-        cts    = data.get("buffer_ct", [])
+        self.n_seen = int(data.get("n_seen", 0))
+        self._buffer = deque(maxlen=self.capacity)
+        xs = data.get("buffer_X", [])
+        succs = data.get("buffer_success", [])
+        cts = data.get("buffer_ct", [])
         yields = data.get("buffer_yield", [])
-        melts  = data.get("buffer_melt", [])
+        melts = data.get("buffer_melt", [])
         for i in range(len(xs)):
-            self._buffer.append((
-                np.array(xs[i], dtype=np.float32),
-                float(succs[i]),
-                float(cts[i]),
-                float(yields[i]),
-                float(melts[i]),
-            ))
+            self._buffer.append(
+                (
+                    np.array(xs[i], dtype=np.float32),
+                    float(succs[i]),
+                    float(cts[i]),
+                    float(yields[i]),
+                    float(melts[i]),
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
 # 4. Online Platt Calibrator
 # ---------------------------------------------------------------------------
+
 
 class OnlinePlattCalibrator:
     """Streaming sigmoid calibration via stochastic gradient on binary cross-entropy.
@@ -596,6 +624,7 @@ class OnlinePlattCalibrator:
 # 5. Federated Averager
 # ---------------------------------------------------------------------------
 
+
 class FederatedAverager:
     """Weighted Federated Averaging (FedAvg) for NumPy MLP + MultiTaskAmpHead.
 
@@ -632,9 +661,13 @@ class FederatedAverager:
         averaged: Dict[str, np.ndarray] = {}
         for key in weight_dicts[0]:
             try:
-                stacked = np.stack([np.array(d[key], dtype=np.float64) for d in weight_dicts])
+                stacked = np.stack(
+                    [np.array(d[key], dtype=np.float64) for d in weight_dicts]
+                )
                 weights = np.array(sample_counts, dtype=np.float64) / total
-                averaged[key] = np.sum(stacked * weights.reshape(-1, *([1] * (stacked.ndim - 1))), axis=0).astype(np.float32)
+                averaged[key] = np.sum(
+                    stacked * weights.reshape(-1, *([1] * (stacked.ndim - 1))), axis=0
+                ).astype(np.float32)
             except Exception as e:
                 logger.warning(f"FedAvg: skipping key '{key}': {e}")
         return averaged
@@ -662,8 +695,18 @@ class FederatedAverager:
 
         # Identify numeric-tensor keys (skip scalar metadata)
         scalar_keys = {"w_ct", "w_yield", "w_melt", "t"}
-        tensor_layer_keys = ["trunk_l1", "trunk_ln1", "trunk_l2", "trunk_ln2",
-                             "ct_h1", "ct_out", "yield_h1", "yield_out", "melt_h1", "melt_out"]
+        tensor_layer_keys = [
+            "trunk_l1",
+            "trunk_ln1",
+            "trunk_l2",
+            "trunk_ln2",
+            "ct_h1",
+            "ct_out",
+            "yield_h1",
+            "yield_out",
+            "melt_h1",
+            "melt_out",
+        ]
 
         for layer_key in tensor_layer_keys:
             if layer_key not in weight_dicts[0]:
@@ -671,8 +714,16 @@ class FederatedAverager:
             result[layer_key] = {}
             for sub_key in weight_dicts[0][layer_key]:
                 try:
-                    stacked = np.stack([np.array(d[layer_key][sub_key], dtype=np.float64) for d in weight_dicts])
-                    avg = np.sum(stacked * weights.reshape(-1, *([1] * (stacked.ndim - 1))), axis=0)
+                    stacked = np.stack(
+                        [
+                            np.array(d[layer_key][sub_key], dtype=np.float64)
+                            for d in weight_dicts
+                        ]
+                    )
+                    avg = np.sum(
+                        stacked * weights.reshape(-1, *([1] * (stacked.ndim - 1))),
+                        axis=0,
+                    )
                     result[layer_key][sub_key] = avg.astype(np.float32).tolist()
                 except Exception as e:
                     logger.warning(f"FedAvg: skipping {layer_key}.{sub_key}: {e}")
@@ -693,7 +744,9 @@ class FederatedAverager:
                 setattr(mlp, name, w.copy())
 
     @staticmethod
-    def apply_to_multitask(multitask_head: Any, averaged_weights: Dict[str, Any]) -> None:
+    def apply_to_multitask(
+        multitask_head: Any, averaged_weights: Dict[str, Any]
+    ) -> None:
         """Applies federated-averaged weights to a MultiTaskAmpHead instance."""
         multitask_head.from_dict(averaged_weights)
 
@@ -701,6 +754,7 @@ class FederatedAverager:
 # ---------------------------------------------------------------------------
 # 6. ContinualLearner — Top-Level Orchestrator
 # ---------------------------------------------------------------------------
+
 
 class ContinualLearner:
     """Orchestrates all continual and federated learning components.
@@ -772,18 +826,24 @@ class ContinualLearner:
         self.ewc.anchor(mlp, multitask_head)
 
         # Estimate Fisher on anchor dataset
-        self.ewc.fisher.estimate(mlp, multitask_head, X_anchor, y_success, y_ct, y_yield, y_melt)
+        self.ewc.fisher.estimate(
+            mlp, multitask_head, X_anchor, y_success, y_ct, y_yield, y_melt
+        )
 
         # Pre-populate replay buffer with anchor data
         if y_ct is None:
-            y_ct = np.clip(15.0 + (1.0 - y_success) * 25.0, 15.0, 40.0).astype(np.float32)
+            y_ct = np.clip(15.0 + (1.0 - y_success) * 25.0, 15.0, 40.0).astype(
+                np.float32
+            )
         if y_yield is None:
             y_yield = y_success.copy()
         if y_melt is None:
             y_melt = np.ones_like(y_success)
         self.replay.add_batch(X_anchor, y_success, y_ct, y_yield, y_melt)
 
-        logger.info(f"ContinualLearner anchored. Replay buffer: {len(self.replay)} samples.")
+        logger.info(
+            f"ContinualLearner anchored. Replay buffer: {len(self.replay)} samples."
+        )
 
     def update_from_new_data(
         self,
@@ -818,7 +878,9 @@ class ContinualLearner:
 
         # Infer missing targets from success labels
         if y_ct is None:
-            y_ct = np.clip(15.0 + (1.0 - y_success) * 25.0, 15.0, 40.0).astype(np.float32)
+            y_ct = np.clip(15.0 + (1.0 - y_success) * 25.0, 15.0, 40.0).astype(
+                np.float32
+            )
         if y_yield is None:
             y_yield = y_success.astype(np.float32)
         if y_melt is None:
@@ -836,7 +898,9 @@ class ContinualLearner:
 
             for i in idx:
                 x_i = X_new[i]
-                loss = multitask_head.backward(x_i, float(y_ct[i]), float(y_yield[i]), float(y_melt[i]))
+                loss = multitask_head.backward(
+                    x_i, float(y_ct[i]), float(y_yield[i]), float(y_melt[i])
+                )
 
                 # Apply EWC gradient regularization to trunk_l1 weights
                 ewc_grads = self.ewc.compute_ewc_gradients_mt(multitask_head)
@@ -847,16 +911,24 @@ class ContinualLearner:
 
                 # Apply gradient step
                 multitask_head.t += 1
-                for layer in [multitask_head.trunk_l1, multitask_head.trunk_l2,
-                               multitask_head.ct_h1, multitask_head.ct_out,
-                               multitask_head.yield_h1, multitask_head.yield_out,
-                               multitask_head.melt_h1, multitask_head.melt_out]:
+                for layer in [
+                    multitask_head.trunk_l1,
+                    multitask_head.trunk_l2,
+                    multitask_head.ct_h1,
+                    multitask_head.ct_out,
+                    multitask_head.yield_h1,
+                    multitask_head.yield_out,
+                    multitask_head.melt_h1,
+                    multitask_head.melt_out,
+                ]:
                     layer.adam_step(self.fine_tune_lr, multitask_head.t)
 
                 epoch_new_loss += loss
                 epoch_ewc_pen += self.ewc.compute_penalty(
-                    type("_DummyMLP", (), self.ewc.anchor_mlp)(),  # dummy for penalty check
-                    multitask_head
+                    type(
+                        "_DummyMLP", (), self.ewc.anchor_mlp
+                    )(),  # dummy for penalty check
+                    multitask_head,
                 )
 
             new_losses.append(epoch_new_loss / max(N, 1))
@@ -873,10 +945,16 @@ class ContinualLearner:
                     )
                     replay_epoch_loss += rl
                     multitask_head.t += 1
-                    for layer in [multitask_head.trunk_l1, multitask_head.trunk_l2,
-                                   multitask_head.ct_h1, multitask_head.ct_out,
-                                   multitask_head.yield_h1, multitask_head.yield_out,
-                                   multitask_head.melt_h1, multitask_head.melt_out]:
+                    for layer in [
+                        multitask_head.trunk_l1,
+                        multitask_head.trunk_l2,
+                        multitask_head.ct_h1,
+                        multitask_head.ct_out,
+                        multitask_head.yield_h1,
+                        multitask_head.yield_out,
+                        multitask_head.melt_h1,
+                        multitask_head.melt_out,
+                    ]:
                         layer.adam_step(self.fine_tune_lr, multitask_head.t)
                 replay_losses.append(replay_epoch_loss / max(len(X_r), 1))
             else:
@@ -892,8 +970,10 @@ class ContinualLearner:
         # ── Online Platt recalibration ────────────────────────────────
         if raw_scores is not None:
             bce_loss = self.calibrator.update(raw_scores, y_success)
-            logger.info(f"Platt calibration updated. BCE loss: {bce_loss:.4f} | "
-                        f"a={self.calibrator.a:.4f}, b={self.calibrator.b:.4f}")
+            logger.info(
+                f"Platt calibration updated. BCE loss: {bce_loss:.4f} | "
+                f"a={self.calibrator.a:.4f}, b={self.calibrator.b:.4f}"
+            )
 
         return {
             "new_losses": new_losses,
@@ -932,7 +1012,7 @@ class ContinualLearner:
         all_mt = [multitask_head.to_dict()] + remote_mt_weights
 
         avg_mlp = FederatedAverager.average_mlp_weights(all_mlp, all_counts)
-        avg_mt  = FederatedAverager.average_multitask_weights(all_mt, all_counts)
+        avg_mt = FederatedAverager.average_multitask_weights(all_mt, all_counts)
 
         FederatedAverager.apply_to_mlp(mlp, avg_mlp)
         FederatedAverager.apply_to_multitask(multitask_head, avg_mt)

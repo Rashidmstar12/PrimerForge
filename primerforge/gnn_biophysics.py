@@ -57,7 +57,14 @@ def build_primer_graph(sequence: str) -> Tuple[np.ndarray, np.ndarray]:
 
     # Self-complementarity base-pairing (hairpin loops)
     # Connect complementary bases A-T, G-C, G-T if distance > 3 bp
-    complement_pairs = {("A", "T"), ("T", "A"), ("G", "C"), ("C", "G"), ("G", "T"), ("T", "G")}
+    complement_pairs = {
+        ("A", "T"),
+        ("T", "A"),
+        ("G", "C"),
+        ("C", "G"),
+        ("G", "T"),
+        ("T", "G"),
+    }
     for i in range(N):
         for j in range(i + 4, N):
             if (sequence[i], sequence[j]) in complement_pairs:
@@ -130,7 +137,14 @@ def build_hybrid_graph(seq1: str, seq2: str) -> Tuple[np.ndarray, np.ndarray]:
     max_count = -1
     best_shift = 0
 
-    complement_pairs = {("A", "T"), ("T", "A"), ("G", "C"), ("C", "G"), ("G", "T"), ("T", "G")}
+    complement_pairs = {
+        ("A", "T"),
+        ("T", "A"),
+        ("G", "C"),
+        ("C", "G"),
+        ("G", "T"),
+        ("T", "G"),
+    }
 
     # Antiparallel sequence 2
     seq2_rev = seq2[::-1]
@@ -169,10 +183,10 @@ def compute_symmetric_normalized_adjacency(A: np.ndarray) -> np.ndarray:
     tilde_A = A + np.eye(N, dtype=np.float32)
     degrees = np.sum(tilde_A, axis=1)
     degrees[degrees == 0.0] = 1.0
-    
+
     deg_inv_sqrt = 1.0 / np.sqrt(degrees)
     deg_inv_sqrt_mat = np.diag(deg_inv_sqrt)
-    
+
     return deg_inv_sqrt_mat @ tilde_A @ deg_inv_sqrt_mat
 
 
@@ -196,10 +210,10 @@ class GraphConvLayer:
         """H shape: (N, in_dim), A_hat shape: (N, N), Output: (N, out_dim)."""
         self.last_H = H
         self.last_A_hat = A_hat
-        
+
         # Z = A_hat * H * W
         self.last_Z = A_hat @ H @ self.W
-        
+
         # ReLU activation
         return np.maximum(0.0, self.last_Z)
 
@@ -207,11 +221,11 @@ class GraphConvLayer:
         """d_out shape: (N, out_dim), Returns gradient on input H."""
         # Gradient through ReLU: dZ = d_out * (Z > 0)
         d_Z = d_out * (self.last_Z > 0)
-        
+
         # Gradients on weights: dW = H^T * A_hat^T * dZ
         # Since A_hat is symmetric, A_hat^T = A_hat
         self.dW = self.last_H.T @ (self.last_A_hat @ d_Z)
-        
+
         # Gradient on input H: dH = A_hat * dZ * W^T
         d_H = self.last_A_hat @ d_Z @ self.W.T
         return d_H
@@ -250,7 +264,7 @@ class BioGNN:
         # FFN dense layers
         self.W1 = np.random.normal(0, np.sqrt(2.0 / 8), (8, 8)).astype(np.float32)
         self.b1 = np.zeros(8, dtype=np.float32)
-        
+
         self.W2 = np.random.normal(0, np.sqrt(2.0 / 8), (8, 2)).astype(np.float32)
         self.b2 = np.zeros(2, dtype=np.float32)
 
@@ -271,18 +285,18 @@ class BioGNN:
         Returns predictions of shape (2,) representing [predicted_Tm, predicted_dG].
         """
         A_hat = compute_symmetric_normalized_adjacency(A)
-        
+
         # 1. Graph Convolutions
         h1 = self.conv1.forward(X, A_hat)
         h2 = self.conv2.forward(h1, A_hat)
-        
+
         # 2. Mean Readout
         self.last_h_pool = self.pool.forward(h2)
-        
+
         # 3. Dense classification head
         self.last_z1 = self.last_h_pool @ self.W1 + self.b1
         self.last_a1 = np.maximum(0.0, self.last_z1)  # ReLU
-        
+
         out = self.last_a1 @ self.W2 + self.b2
         return out[0]
 
@@ -293,27 +307,27 @@ class BioGNN:
         """
         # Reshape to (1, 2)
         d_out_flat = d_out.reshape(1, 2)
-        
+
         # Dense Layer 2 backward
         self.dW2 = self.last_a1.T @ d_out_flat
         self.db2 = np.sum(d_out_flat, axis=0)
         d_a1 = d_out_flat @ self.W2.T
-        
+
         # ReLU dense activation backward
         d_z1 = d_a1 * (self.last_z1 > 0)
-        
+
         # Dense Layer 1 backward
         self.dW1 = self.last_h_pool.T @ d_z1
         self.db1 = np.sum(d_z1, axis=0)
         d_pool = d_z1 @ self.W1.T
-        
+
         # Mean Pooling backward
         d_conv2_out = self.pool.backward(d_pool)
-        
+
         # Graph convolutions backward
         d_conv1_out = self.conv2.backward(d_conv2_out)
         d_X_in = self.conv1.backward(d_conv1_out)
-        
+
         return d_X_in, np.zeros_like(d_X_in)
 
     def step(self, lr: float = 0.01) -> None:
@@ -321,14 +335,20 @@ class BioGNN:
         # Graph convolution layers
         self.conv1.W -= lr * self.conv1.dW
         self.conv2.W -= lr * self.conv2.dW
-        
+
         # Dense layers
         self.W1 -= lr * self.dW1
         self.b1 -= lr * self.db1
         self.W2 -= lr * self.dW2
         self.b2 -= lr * self.db2
 
-    def train_on_pairs(self, sequences: List[Tuple[str, str]], targets: np.ndarray, epochs: int = 15, lr: float = 0.005) -> List[float]:
+    def train_on_pairs(
+        self,
+        sequences: List[Tuple[str, str]],
+        targets: np.ndarray,
+        epochs: int = 15,
+        lr: float = 0.005,
+    ) -> List[float]:
         """Trains the GNN directly on a list of sequence pair complexes."""
         losses = []
         N = len(sequences)
@@ -337,38 +357,38 @@ class BioGNN:
 
         for epoch in range(epochs):
             epoch_loss = 0.0
-            
+
             # Shuffle indices
             indices = np.arange(N)
             np.random.shuffle(indices)
-            
+
             for idx in indices:
                 seq1, seq2 = sequences[idx]
                 target = targets[idx]
-                
+
                 # Build graph
                 X, A = build_hybrid_graph(seq1, seq2)
                 if X.shape[0] == 0:
                     continue
-                
+
                 # Forward
                 pred = self.forward(X, A)
-                
+
                 # Loss (MSE)
                 loss = 0.5 * np.sum((pred - target) ** 2)
                 epoch_loss += loss
-                
+
                 # Backward
                 d_out = pred - target
                 self.backward(d_out)
-                
+
                 # Gradient update step
                 self.step(lr)
-                
+
             epoch_loss /= N
             losses.append(epoch_loss)
             logger.debug(f"BioGNN Epoch {epoch+1}/{epochs} | Loss: {epoch_loss:.5f}")
-            
+
         return losses
 
     def to_dict(self) -> Dict[str, Any]:

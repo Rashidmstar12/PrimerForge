@@ -115,3 +115,92 @@ Demonstrates how the model uses uncertainty-based acquisition functions to learn
 4.  **Review Convergence Curves**: Compare the learning speeds. You will observe that the **hybrid and epistemic** models converge to high accuracy up to **80% faster** than the random control baseline!
 
 ![Tab 6: Active Learning Convergence](C:\Users\rashi\.gemini\antigravity\brain\bcbfc150-a432-4803-b489-6989d6655405\media__1780154812382.png)
+
+---
+
+## 💻 7. Programmatic API & Library Integration for Developers
+
+PrimerForge is fully modular and exposes clean, well-documented Python interfaces. This allows developers to integrate our pangenome-aware design tools, thermodynamic engines, and machine learning models directly into third-party genomic applications, laboratory management software, or web portals.
+
+### Installing the API Package
+Simply add PrimerForge as a dependency to your project:
+```bash
+pip install primerforge
+```
+
+### Core API Classes and Methods
+
+1. **`BiophysicsEngine`**: Handles thermodynamic melting temperature calculations, secondary structures, and candidate generation wrapping `primer3-py`.
+   - `generate_candidates(target_sequence: str, num_return: int)` -> Generates candidate primer pairs.
+   - `calculate_terminal_dg(sequence: str, n_terminal: int)` -> Computes the SantaLucia 1998 unified nearest-neighbor thermodynamic free energy of the 3' end.
+   - `calculate_mismatch_penalty(primer_seq: str, template_seq: str)` -> Position-specific Taq-weighted mismatch thermodynamics extension penalty.
+
+2. **`MLScorer`**: Predicts empirical wet-lab PCR amplification success.
+   - `predict_success(pair: PrimerPair, spec_data: dict)` -> Returns a Platt-calibrated success probability float ∈ [0.01, 0.99].
+   - `predict_success_with_uncertainty(pair: PrimerPair)` -> Returns a tuple (mean_probability, uncertainty_std) with confidence intervals.
+   - `predict_amplification_profile(pair: PrimerPair)` -> Predicts Ct values, endpoint yields, and melt peak counts.
+
+3. **`MultiplexOptimizer`**: Integer Linear Programming (ILP) panel solver.
+   - `optimize_panel(evaluated_pairs: list, max_plex: int, delta_g_threshold: float)` -> Computes the optimal global combination of 100% dimer-free multiplex primer pairs.
+
+4. **`TiledAmpliconRouter`**: Shortest-path tiled router.
+   - `design_tiled_amplicons(target_sequence: str, tile_size: int, overlap: int)` -> Generates overlapping tiling schemes.
+
+### Code Walkthrough: Custom Biophysical Assay Pipeline
+
+```python
+import os
+from primerforge import BiophysicsEngine, MLScorer, MultiplexOptimizer
+
+# Initialize the biophysical engine
+engine = BiophysicsEngine(
+    opt_tm=60.0,
+    min_tm=57.0,
+    max_tm=63.0,
+    salt_monovalent=50.0,
+    salt_divalent=1.5
+)
+
+# Generate candidates for target DNA
+target = "CACCATTGGCAATGAGCGGTTCCGCTGCCCTGAGGCACTCTTCCAGCCTTCCTTCCTGGGCATGGAGTCCT"
+candidates = engine.generate_candidates(target, num_return=10)
+
+# Load the empirical GBDT success scorer
+scorer = MLScorer(model_path="models/primerforge_lightgbm.model")
+
+# Score and filter based on thermodynamic parameters
+valid_evals = []
+for idx, pair in enumerate(candidates):
+    # Predict success
+    success = scorer.predict_success(pair)
+    
+    # Check 3' terminal stability (SantaLucia 1998 parameters)
+    f_3_stab = engine.calculate_terminal_dg(pair.forward.sequence, n_terminal=5)
+    r_3_stab = engine.calculate_terminal_dg(pair.reverse.sequence, n_terminal=5)
+    
+    # Store candidates that pass baseline criteria
+    if f_3_stab < -1.0 and r_3_stab < -1.0:
+        valid_evals.append({
+            "pair": pair,
+            "predicted_success": success,
+            "is_valid": True,
+            "off_targets": 0
+        })
+
+# Mathematically optimize a dimer-free multiplex panel using ILP
+optimizer = MultiplexOptimizer(engine)
+selected_panel, obj_val = optimizer.optimize_panel(
+    valid_evals, max_plex=3, delta_g_threshold=-4.5
+)
+
+print("=" * 60)
+print(f"Optimal Dimer-Free Multiplex Loci Panel (Objective Value: {obj_val:.2f})")
+print("=" * 60)
+for i, item in enumerate(selected_panel, 1):
+    pair = item["pair"]
+    print(f"Locus {i}:")
+    print(f"  Forward: {pair.forward.sequence} | Tm={pair.forward.tm:.1f}°C")
+    print(f"  Reverse: {pair.reverse.sequence} | Tm={pair.reverse.tm:.1f}°C")
+    print(f"  Predicted Success: {item['predicted_success']*100:.1f}%")
+print("=" * 60)
+```

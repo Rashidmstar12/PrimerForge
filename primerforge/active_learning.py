@@ -29,7 +29,12 @@ class BiophysicalOracle:
         self.noise_std = noise_std
         self.threshold_dg = threshold_dg
 
-    def evaluate(self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None, deterministic: bool = False) -> int:
+    def evaluate(
+        self,
+        pair: PrimerPair,
+        spec_data: Dict[str, Any] | None = None,
+        deterministic: bool = False,
+    ) -> int:
         """Computes true amplification probability and returns binary success (0 or 1)."""
         spec = spec_data or {}
         f_seq = pair.forward.sequence.upper()
@@ -120,11 +125,15 @@ class ActiveLearningEngine:
         self.labeled_pool: List[Tuple[PrimerPair, Dict[str, Any], int]] = []
         self.unlabeled_pool: List[Tuple[PrimerPair, Dict[str, Any]]] = []
 
-    def load_initial_labeled_data(self, data: List[Tuple[PrimerPair, Dict[str, Any], int]]) -> None:
+    def load_initial_labeled_data(
+        self, data: List[Tuple[PrimerPair, Dict[str, Any], int]]
+    ) -> None:
         """Loads the starting training set."""
         self.labeled_pool.extend(data)
 
-    def load_unlabeled_pool(self, data: List[Tuple[PrimerPair, Dict[str, Any]]]) -> None:
+    def load_unlabeled_pool(
+        self, data: List[Tuple[PrimerPair, Dict[str, Any]]]
+    ) -> None:
         """Loads candidates to choose from."""
         self.unlabeled_pool.extend(data)
 
@@ -142,7 +151,11 @@ class ActiveLearningEngine:
         aleatorics = []
 
         # Find quantile boosters in ensemble
-        quantile_boosters = [b for b in self.scorer.models if getattr(b, "objective_type", b.params.get("objective")) == "quantile"]
+        quantile_boosters = [
+            b
+            for b in self.scorer.models
+            if getattr(b, "objective_type", b.params.get("objective")) == "quantile"
+        ]
 
         for pair, spec_data in self.unlabeled_pool:
             p, std_pred = self.scorer.predict_success_with_uncertainty(pair, spec_data)
@@ -151,12 +164,18 @@ class ActiveLearningEngine:
 
             # Compute prediction interval width as proxy for aleatoric uncertainty
             if len(quantile_boosters) >= 2:
-                features = np.array([self.scorer.extract_features(pair, spec_data)], dtype=np.float32)
+                features = np.array(
+                    [self.scorer.extract_features(pair, spec_data)], dtype=np.float32
+                )
                 q05 = float(quantile_boosters[0].predict(features)[0])
                 q95 = float(quantile_boosters[1].predict(features)[0])
                 # Calibrate lower/upper boundaries
-                lower = 1.0 / (1.0 + np.exp(self.scorer.platt_a * q05 + self.scorer.platt_b))
-                upper = 1.0 / (1.0 + np.exp(self.scorer.platt_a * q95 + self.scorer.platt_b))
+                lower = 1.0 / (
+                    1.0 + np.exp(self.scorer.platt_a * q05 + self.scorer.platt_b)
+                )
+                upper = 1.0 / (
+                    1.0 + np.exp(self.scorer.platt_a * q95 + self.scorer.platt_b)
+                )
                 width = abs(upper - lower)
             else:
                 # Fallback prediction interval width
@@ -171,7 +190,9 @@ class ActiveLearningEngine:
             # Shannon Entropy H(p) = -p log2(p) - (1-p) log2(1-p)
             # Clip probability boundaries to prevent log(0)
             p_clamped = np.clip(probs, 1e-6, 1.0 - 1e-6)
-            entropy = -p_clamped * np.log2(p_clamped) - (1.0 - p_clamped) * np.log2(1.0 - p_clamped)
+            entropy = -p_clamped * np.log2(p_clamped) - (1.0 - p_clamped) * np.log2(
+                1.0 - p_clamped
+            )
             return entropy
 
         elif strategy == "epistemic":
@@ -183,8 +204,10 @@ class ActiveLearningEngine:
         elif strategy == "hybrid":
             # Hybrid matches Normalized Entropy + Normalized Epistemic
             p_clamped = np.clip(probs, 1e-6, 1.0 - 1e-6)
-            entropy = -p_clamped * np.log2(p_clamped) - (1.0 - p_clamped) * np.log2(1.0 - p_clamped)
-            
+            entropy = -p_clamped * np.log2(p_clamped) - (1.0 - p_clamped) * np.log2(
+                1.0 - p_clamped
+            )
+
             def norm(arr: np.ndarray) -> np.ndarray:
                 mn, mx = arr.min(), arr.max()
                 if mx - mn > 1e-8:
@@ -196,7 +219,9 @@ class ActiveLearningEngine:
         else:
             raise ValueError(f"Unknown active learning strategy: {strategy}")
 
-    def query_and_label_next_batch(self, batch_size: int, strategy: str, deterministic: bool = False) -> List[Tuple[PrimerPair, Dict[str, Any], int]]:
+    def query_and_label_next_batch(
+        self, batch_size: int, strategy: str, deterministic: bool = False
+    ) -> List[Tuple[PrimerPair, Dict[str, Any], int]]:
         """Queries the top K candidates using the selected strategy, labels them, and moves them to training."""
         N = len(self.unlabeled_pool)
         if N == 0:
@@ -204,7 +229,7 @@ class ActiveLearningEngine:
 
         actual_batch = min(batch_size, N)
         scores = self.compute_acquisition_scores(strategy)
-        
+
         # Sort in descending order of score
         ranked_indices = np.argsort(scores)[::-1]
         selected_pool_indices = ranked_indices[:actual_batch]
@@ -218,14 +243,18 @@ class ActiveLearningEngine:
 
         # Add queries to labeled pool
         self.labeled_pool.extend(queried)
-        logger.info(f"Queried and labeled {actual_batch} candidates using strategy '{strategy}'.")
+        logger.info(
+            f"Queried and labeled {actual_batch} candidates using strategy '{strategy}'."
+        )
         return queried
 
     def retrain_ensemble(self) -> None:
         """Retrains all boosters in the ensemble using the updated labeled training dataset."""
         N = len(self.labeled_pool)
         if N < 10:
-            logger.warning(f"Labeled training set size too small ({N}). Skipping retraining.")
+            logger.warning(
+                f"Labeled training set size too small ({N}). Skipping retraining."
+            )
             return
 
         logger.info(f"Retraining stacked ensemble on N={N} labeled samples...")
@@ -253,7 +282,7 @@ class ActiveLearningEngine:
                 "num_leaves": 15,
                 "max_depth": 4,
                 "verbosity": -1,
-                "seed": seed
+                "seed": seed,
             }
             # Train a smaller model suited for small active learning sets
             booster = lgb.train(params, train_data, num_boost_round=100)
@@ -270,7 +299,7 @@ class ActiveLearningEngine:
                 "num_leaves": 15,
                 "max_depth": 4,
                 "verbosity": -1,
-                "seed": 42
+                "seed": 42,
             }
             q_booster = lgb.train(q_params, train_data, num_boost_round=100)
             q_booster.objective_type = "quantile"
@@ -295,7 +324,7 @@ class ActiveLearningEngine:
         for booster in self.scorer.models:
             if getattr(booster, "objective_type", "regression") != "quantile":
                 raw_preds.append(booster.predict(X))
-        
+
         if hasattr(self.scorer, "mlp") and self.scorer.mlp is not None:
             mlp_preds = self.scorer.mlp.predict(X_seq)
             raw_preds.append(mlp_preds)
@@ -315,4 +344,6 @@ class ActiveLearningEngine:
 
         self.scorer.platt_a = float(A)
         self.scorer.platt_b = float(B)
-        logger.info(f"Retraining complete. Platt platt_a: {self.scorer.platt_a:.4f}, platt_b: {self.scorer.platt_b:.4f}")
+        logger.info(
+            f"Retraining complete. Platt platt_a: {self.scorer.platt_a:.4f}, platt_b: {self.scorer.platt_b:.4f}"
+        )

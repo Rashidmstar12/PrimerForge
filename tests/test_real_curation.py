@@ -4,7 +4,13 @@ import pytest
 import os
 import pandas as pd
 import numpy as np
-from primerforge.data_curation import DataCurationPipeline, PubMedPMCXMLParser, PatentXMLParser, GelVisionAnalyzerStub, MeltCurveAnalyzerStub
+from primerforge.data_curation import (
+    DataCurationPipeline,
+    PubMedPMCXMLParser,
+    PatentXMLParser,
+    GelVisionAnalyzerStub,
+    MeltCurveAnalyzerStub,
+)
 
 
 @pytest.fixture
@@ -23,9 +29,21 @@ def test_scrape_and_curate_real_data(pipeline: DataCurationPipeline) -> None:
 
     # 2. Check Unified Schema columns
     expected_cols = [
-        "species", "chromosome", "forward_seq", "reverse_seq", "target_id",
-        "source_db", "pcr_type", "polymerase", "additive_dmso", "mg_conc_mm",
-        "efficiency", "ct_value", "specificity", "success_idx", "success"
+        "species",
+        "chromosome",
+        "forward_seq",
+        "reverse_seq",
+        "target_id",
+        "source_db",
+        "pcr_type",
+        "polymerase",
+        "additive_dmso",
+        "mg_conc_mm",
+        "efficiency",
+        "ct_value",
+        "specificity",
+        "success_idx",
+        "success",
     ]
     for col in expected_cols:
         assert col in df.columns
@@ -46,7 +64,7 @@ def test_hybrid_dataset_splitting(pipeline: DataCurationPipeline) -> None:
     """Verifies that partition_and_save creates correctly sized training and testing splits."""
     real_df = pipeline.scrape_and_curate_real_data(target_size=10)
     synthetic_df = pipeline.generate_empirical_db(n_samples=10)
-    
+
     hybrid_df = pd.concat([real_df, synthetic_df], ignore_index=True)
 
     X_train, y_train, X_test, y_test = pipeline.partition_and_save(hybrid_df)
@@ -69,10 +87,26 @@ def test_scrape_real_data_ultra(pipeline: DataCurationPipeline) -> None:
 
     # 2. Check Unified Schema columns + extensions
     expected_cols = [
-        "species", "chromosome", "forward_seq", "reverse_seq", "target_id",
-        "source_db", "pcr_type", "polymerase", "polymerase_encoded", "additive_dmso", "mg_conc_mm",
-        "efficiency", "ct_value", "specificity", "success_idx", "success",
-        "salt_monovalent_mm", "salt_divalent_mm", "dntp_conc_mm", "uncertainty_interval"
+        "species",
+        "chromosome",
+        "forward_seq",
+        "reverse_seq",
+        "target_id",
+        "source_db",
+        "pcr_type",
+        "polymerase",
+        "polymerase_encoded",
+        "additive_dmso",
+        "mg_conc_mm",
+        "efficiency",
+        "ct_value",
+        "specificity",
+        "success_idx",
+        "success",
+        "salt_monovalent_mm",
+        "salt_divalent_mm",
+        "dntp_conc_mm",
+        "uncertainty_interval",
     ]
     for col in expected_cols:
         assert col in df.columns
@@ -98,10 +132,26 @@ def test_scrape_real_data_live_ultra(pipeline: DataCurationPipeline) -> None:
 
     # 2. Check Unified Schema columns + extensions
     expected_cols = [
-        "species", "chromosome", "forward_seq", "reverse_seq", "target_id",
-        "source_db", "pcr_type", "polymerase", "polymerase_encoded", "additive_dmso", "mg_conc_mm",
-        "efficiency", "ct_value", "specificity", "success_idx", "success",
-        "salt_monovalent_mm", "salt_divalent_mm", "dntp_conc_mm", "uncertainty_interval"
+        "species",
+        "chromosome",
+        "forward_seq",
+        "reverse_seq",
+        "target_id",
+        "source_db",
+        "pcr_type",
+        "polymerase",
+        "polymerase_encoded",
+        "additive_dmso",
+        "mg_conc_mm",
+        "efficiency",
+        "ct_value",
+        "specificity",
+        "success_idx",
+        "success",
+        "salt_monovalent_mm",
+        "salt_divalent_mm",
+        "dntp_conc_mm",
+        "uncertainty_interval",
     ]
     for col in expected_cols:
         assert col in df.columns

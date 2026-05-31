@@ -16,6 +16,7 @@ logger = setup_logger("primerforge.specificity")
 # Gracefully handle mappy missing on platforms without build environments (e.g. Windows without zlib)
 try:
     import mappy as mp
+
     MAPPY_AVAILABLE = True
 except ImportError:
     mp = None
@@ -47,7 +48,9 @@ class SpecificityEngine:
         """Initializes the SpecificityEngine."""
         self.aligner: Any = None
         self.fasta_path: str | None = None
-        self._fallback_db: Dict[str, str] = {}  # Pure-Python fallback target sequence database
+        self._fallback_db: Dict[str, str] = (
+            {}
+        )  # Pure-Python fallback target sequence database
 
     def index_pangenome(self, fasta_path: str) -> None:
         """Indexes the target pangenome or reference genome.
@@ -69,12 +72,16 @@ class SpecificityEngine:
                     raise RuntimeError("mappy failed to initialize Aligner.")
                 logger.info("mappy pangenome index built successfully.")
             except Exception as e:
-                logger.error(f"mappy index compilation failed: {e}. Falling back to pure-Python.")
+                logger.error(
+                    f"mappy index compilation failed: {e}. Falling back to pure-Python."
+                )
                 self.aligner = None
-        
+
         # Load into fallback memory database (used always if mappy fails/is absent)
         if not self.aligner:
-            logger.info(f"Loading reference into memory for fallback alignment: {fasta_path}...")
+            logger.info(
+                f"Loading reference into memory for fallback alignment: {fasta_path}..."
+            )
             self._load_fallback_db(fasta_path)
 
     def _load_fallback_db(self, fasta_path: str) -> None:
@@ -109,12 +116,22 @@ class SpecificityEngine:
             str: Reverse complement sequence.
         """
         complement = {
-            "A": "T", "C": "G", "G": "C", "T": "A", "N": "N",
-            "a": "t", "c": "g", "g": "c", "t": "a", "n": "n"
+            "A": "T",
+            "C": "G",
+            "G": "C",
+            "T": "A",
+            "N": "N",
+            "a": "t",
+            "c": "g",
+            "g": "c",
+            "t": "a",
+            "n": "n",
         }
         return "".join(complement.get(base, base) for base in reversed(seq))
 
-    def check_specificity(self, primer_sequence: str, max_mismatches: int = 3) -> List[AlignmentHit]:
+    def check_specificity(
+        self, primer_sequence: str, max_mismatches: int = 3
+    ) -> List[AlignmentHit]:
         """Scans the indexed reference genome/pangenome for potential primer hybridization sites.
 
         Args:
@@ -125,7 +142,9 @@ class SpecificityEngine:
             List[AlignmentHit]: A list of alignment hits matching target criteria.
         """
         if not self.fasta_path:
-            raise RuntimeError("Pangenome index is not loaded. Call index_pangenome first.")
+            raise RuntimeError(
+                "Pangenome index is not loaded. Call index_pangenome first."
+            )
 
         primer_seq_upper = primer_sequence.upper()
 
@@ -149,7 +168,9 @@ class SpecificityEngine:
                     )
                 return hits
             except Exception as e:
-                logger.error(f"mappy alignment failed: {e}. Running fallback alignment.")
+                logger.error(
+                    f"mappy alignment failed: {e}. Running fallback alignment."
+                )
 
         # Pure-Python sliding window fallback aligner
         return self._fallback_align(primer_seq_upper, max_mismatches)
@@ -168,7 +189,7 @@ class SpecificityEngine:
             # Slide window across reference sequence
             for i in range(ref_len - seq_len + 1):
                 window = ref_seq[i : i + seq_len]
-                
+
                 # Check forward strand
                 mismatches_f = sum(1 for a, b in zip(sequence, window) if a != b)
                 if mismatches_f <= max_mismatches:

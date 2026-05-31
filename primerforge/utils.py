@@ -4,7 +4,9 @@ import logging
 import sys
 
 
-def setup_logger(name: str = "primerforge", level: int = logging.INFO) -> logging.Logger:
+def setup_logger(
+    name: str = "primerforge", level: int = logging.INFO
+) -> logging.Logger:
     """Sets up a standardized console logger for the PrimerForge application.
 
     Args:

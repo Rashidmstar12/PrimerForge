@@ -21,8 +21,14 @@ class DNASequenceTokenizer:
 
     def __init__(self, max_len: int = 24) -> None:
         self.vocab = {
-            "A": 0, "T": 1, "G": 2, "C": 3,
-            "<pad>": 4, "<mask>": 5, "<cls>": 6, "<sep>": 7
+            "A": 0,
+            "T": 1,
+            "G": 2,
+            "C": 3,
+            "<pad>": 4,
+            "<mask>": 5,
+            "<cls>": 6,
+            "<sep>": 7,
         }
         self.inv_vocab = {v: k for k, v in self.vocab.items()}
         self.max_len = max_len
@@ -48,7 +54,7 @@ class DNASequenceTokenizer:
         if len(tokens) < self.max_len:
             tokens.extend([self.vocab["<pad>"]] * (self.max_len - len(tokens)))
         else:
-            tokens = tokens[:self.max_len]
+            tokens = tokens[: self.max_len]
 
         return np.array(tokens, dtype=np.int32)
 
@@ -60,7 +66,13 @@ class DNASequenceTokenizer:
 class AdamOptimizer:
     """Adam Optimizer for updating weights in pure NumPy."""
 
-    def __init__(self, lr: float = 0.005, beta1: float = 0.9, beta2: float = 0.999, eps: float = 1e-8) -> None:
+    def __init__(
+        self,
+        lr: float = 0.005,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ) -> None:
         self.lr = lr
         self.beta1 = beta1
         self.beta2 = beta2
@@ -76,10 +88,10 @@ class AdamOptimizer:
             self.v[param_id] = np.zeros_like(param)
 
         self.m[param_id] = self.beta1 * self.m[param_id] + (1 - self.beta1) * grad
-        self.v[param_id] = self.beta2 * self.v[param_id] + (1 - self.beta2) * (grad ** 2)
+        self.v[param_id] = self.beta2 * self.v[param_id] + (1 - self.beta2) * (grad**2)
 
-        m_hat = self.m[param_id] / (1 - self.beta1 ** self.t)
-        v_hat = self.v[param_id] / (1 - self.beta2 ** self.t)
+        m_hat = self.m[param_id] / (1 - self.beta1**self.t)
+        v_hat = self.v[param_id] / (1 - self.beta2**self.t)
 
         param -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
@@ -88,8 +100,10 @@ def get_sinusoidal_positional_encoding(max_len: int, d_model: int) -> np.ndarray
     """Computes fixed sinusoidal positional encodings."""
     pe = np.zeros((max_len, d_model), dtype=np.float32)
     position = np.arange(0, max_len, dtype=np.float32)[:, np.newaxis]
-    div_term = np.exp(np.arange(0, d_model, 2, dtype=np.float32) * -(np.log(10000.0) / d_model))
-    
+    div_term = np.exp(
+        np.arange(0, d_model, 2, dtype=np.float32) * -(np.log(10000.0) / d_model)
+    )
+
     pe[:, 0::2] = np.sin(position * div_term)
     pe[:, 1::2] = np.cos(position * div_term)
     return pe
@@ -102,7 +116,9 @@ class EmbeddingLayer:
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
         # He/Xavier-like initialization
-        self.W = np.random.normal(0, np.sqrt(2.0 / (vocab_size + embed_dim)), (vocab_size, embed_dim)).astype(np.float32)
+        self.W = np.random.normal(
+            0, np.sqrt(2.0 / (vocab_size + embed_dim)), (vocab_size, embed_dim)
+        ).astype(np.float32)
         self.dW = np.zeros_like(self.W)
         self.last_inputs: np.ndarray | None = None
 
@@ -132,7 +148,7 @@ class LayerNormLayer:
         self.beta = np.zeros(embed_dim, dtype=np.float32)
         self.dgamma = np.zeros_like(self.gamma)
         self.dbeta = np.zeros_like(self.beta)
-        
+
         # Cache for backpropagation
         self.last_x: np.ndarray | None = None
         self.last_mean: np.ndarray | None = None
@@ -151,18 +167,23 @@ class LayerNormLayer:
         """d_out shape: (B, T, D), Returns gradient with respect to input dx."""
         self.dgamma = np.sum(d_out * self.last_x_hat, axis=(0, 1))
         self.dbeta = np.sum(d_out, axis=(0, 1))
-        
+
         B, T, D = d_out.shape
         std_inv = 1.0 / np.sqrt(self.last_var + self.eps)
-        
+
         # d_x_hat gradient
         dx_hat = d_out * self.gamma
-        
+
         # Standard analytical backprop for LayerNorm
-        dx = (1.0 / D) * std_inv * (
-            D * dx_hat -
-            np.sum(dx_hat, axis=-1, keepdims=True) -
-            self.last_x_hat * np.sum(dx_hat * self.last_x_hat, axis=-1, keepdims=True)
+        dx = (
+            (1.0 / D)
+            * std_inv
+            * (
+                D * dx_hat
+                - np.sum(dx_hat, axis=-1, keepdims=True)
+                - self.last_x_hat
+                * np.sum(dx_hat * self.last_x_hat, axis=-1, keepdims=True)
+            )
         )
         return dx
 
@@ -174,19 +195,21 @@ class MultiHeadAttentionLayer:
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
+        assert (
+            self.head_dim * num_heads == embed_dim
+        ), "embed_dim must be divisible by num_heads"
 
         # Parameters Q, K, V projections and Output projection
         scale = np.sqrt(1.0 / embed_dim)
         self.W_q = np.random.normal(0, scale, (embed_dim, embed_dim)).astype(np.float32)
         self.b_q = np.zeros(embed_dim, dtype=np.float32)
-        
+
         self.W_k = np.random.normal(0, scale, (embed_dim, embed_dim)).astype(np.float32)
         self.b_k = np.zeros(embed_dim, dtype=np.float32)
-        
+
         self.W_v = np.random.normal(0, scale, (embed_dim, embed_dim)).astype(np.float32)
         self.b_v = np.zeros(embed_dim, dtype=np.float32)
-        
+
         self.W_o = np.random.normal(0, scale, (embed_dim, embed_dim)).astype(np.float32)
         self.b_o = np.zeros(embed_dim, dtype=np.float32)
 
@@ -245,11 +268,11 @@ class MultiHeadAttentionLayer:
 
         # 5. Weighted values context: (B, H, T, D_k)
         context_h = attn_weights @ v_h
-        
+
         # 6. Concat heads and project back to D
         context = context_h.transpose(0, 2, 1, 3).reshape(B, T, D)
         self.last_context = context
-        
+
         out = context.reshape(B * T, D) @ self.W_o + self.b_o
         return out.reshape(B, T, D)
 
@@ -264,13 +287,13 @@ class MultiHeadAttentionLayer:
         context_flat = self.last_context.reshape(B * T, D)
         self.dW_o = context_flat.T @ d_out_flat
         self.db_o = np.sum(d_out_flat, axis=0)
-        
+
         # Gradient backpropagated into context: (B, T, D)
         d_context = (d_out_flat @ self.W_o.T).reshape(B, T, D)
 
         # 2. Transpose context to multi-head: (B, H, T, D_k)
         d_context_h = d_context.reshape(B, T, H, D_k).transpose(0, 2, 1, 3)
-        
+
         q_h = self.last_q.reshape(B, T, H, D_k).transpose(0, 2, 1, 3)
         k_h = self.last_k.reshape(B, T, H, D_k).transpose(0, 2, 1, 3)
         v_h = self.last_v.reshape(B, T, H, D_k).transpose(0, 2, 1, 3)
@@ -278,15 +301,20 @@ class MultiHeadAttentionLayer:
 
         # 3. Gradients through context = attn_weights @ v_h
         # d_attn_weights: (B, H, T, T)
-        d_attn_weights = d_context_h @ k_h.transpose(0, 1, 3, 2)  # Wait, no! it is d_context_h @ v_h.T
+        d_attn_weights = d_context_h @ k_h.transpose(
+            0, 1, 3, 2
+        )  # Wait, no! it is d_context_h @ v_h.T
         d_attn_weights = d_context_h @ v_h.transpose(0, 1, 3, 2)
         # d_v_h: (B, H, T, D_k)
         d_v_h = attn_weights.transpose(0, 1, 3, 2) @ d_context_h
 
         # 4. Gradient through Softmax: S = softmax(scores)
         # For each head, batch, position: d_scores = S * (d_S - sum(d_S * S, axis=-1))
-        d_scores = attn_weights * (d_attn_weights - np.sum(d_attn_weights * attn_weights, axis=-1, keepdims=True))
-        
+        d_scores = attn_weights * (
+            d_attn_weights
+            - np.sum(d_attn_weights * attn_weights, axis=-1, keepdims=True)
+        )
+
         # Scale back: scores = Q @ K.T / sqrt(D_k)
         d_scores_scaled = d_scores / np.sqrt(D_k)
 
@@ -303,10 +331,10 @@ class MultiHeadAttentionLayer:
         x_flat = self.last_x.reshape(B * T, D)
         self.dW_q = x_flat.T @ d_q
         self.db_q = np.sum(d_q, axis=0)
-        
+
         self.dW_k = x_flat.T @ d_k
         self.db_k = np.sum(d_k, axis=0)
-        
+
         self.dW_v = x_flat.T @ d_v
         self.db_v = np.sum(d_v, axis=0)
 
@@ -325,10 +353,14 @@ class FeedForwardLayer:
         # Initial weights & biases
         scale1 = np.sqrt(2.0 / embed_dim)
         scale2 = np.sqrt(2.0 / hidden_dim)
-        self.W1 = np.random.normal(0, scale1, (embed_dim, hidden_dim)).astype(np.float32)
+        self.W1 = np.random.normal(0, scale1, (embed_dim, hidden_dim)).astype(
+            np.float32
+        )
         self.b1 = np.zeros(hidden_dim, dtype=np.float32)
-        
-        self.W2 = np.random.normal(0, scale2, (hidden_dim, embed_dim)).astype(np.float32)
+
+        self.W2 = np.random.normal(0, scale2, (hidden_dim, embed_dim)).astype(
+            np.float32
+        )
         self.b2 = np.zeros(embed_dim, dtype=np.float32)
 
         self.dW1 = np.zeros_like(self.W1)
@@ -346,10 +378,10 @@ class FeedForwardLayer:
         self.last_x = x
         B, T, D = x.shape
         x_flat = x.reshape(B * T, D)
-        
+
         self.last_z1 = x_flat @ self.W1 + self.b1
         self.last_a1 = np.maximum(0.0, self.last_z1)  # ReLU
-        
+
         out_flat = self.last_a1 @ self.W2 + self.b2
         return out_flat.reshape(B, T, D)
 
@@ -357,22 +389,22 @@ class FeedForwardLayer:
         """d_out shape: (B, T, D), Returns gradient on input dx."""
         B, T, D = d_out.shape
         d_out_flat = d_out.reshape(B * T, D)
-        
+
         # Second layer gradients
         self.dW2 = self.last_a1.T @ d_out_flat
         self.db2 = np.sum(d_out_flat, axis=0)
-        
+
         # Backprop through linear layer 2
         d_a1 = d_out_flat @ self.W2.T
-        
+
         # Backprop through ReLU
         d_z1 = d_a1 * (self.last_z1 > 0)
-        
+
         # First layer gradients
         x_flat = self.last_x.reshape(B * T, D)
         self.dW1 = x_flat.T @ d_z1
         self.db1 = np.sum(d_z1, axis=0)
-        
+
         # Input gradient
         dx_flat = d_z1 @ self.W1.T
         return dx_flat.reshape(B, T, D)
@@ -392,7 +424,7 @@ class TransformerEncoderBlock:
         # 1. Self Attention + Residual
         attn_out = self.attn.forward(x)
         x_ln1 = self.ln1.forward(x + attn_out)
-        
+
         # 2. Feedforward + Residual
         ff_out = self.ff.forward(x_ln1)
         x_ln2 = self.ln2.forward(x_ln1 + ff_out)
@@ -404,7 +436,7 @@ class TransformerEncoderBlock:
         d_ln2 = self.ln2.backward(d_out)
         d_ff_in = self.ff.backward(d_ln2)
         d_x_ln1 = d_ln2 + d_ff_in
-        
+
         # Attention block + LN1 backward
         d_ln1 = self.ln1.backward(d_x_ln1)
         d_attn_in = self.attn.backward(d_ln1)
@@ -421,10 +453,10 @@ class MLMHeadLayer:
         scale = np.sqrt(2.0 / embed_dim)
         self.W = np.random.normal(0, scale, (embed_dim, vocab_size)).astype(np.float32)
         self.b = np.zeros(vocab_size, dtype=np.float32)
-        
+
         self.dW = np.zeros_like(self.W)
         self.db = np.zeros_like(self.b)
-        
+
         # Cache
         self.last_x: np.ndarray | None = None
         self.last_masked_positions: np.ndarray | None = None
@@ -440,9 +472,9 @@ class MLMHeadLayer:
         self.last_masked_positions = masked_positions
         # Extract states: shape (num_masked, D)
         self.last_x = x[masked_positions]
-        
+
         logits = self.last_x @ self.W + self.b
-        
+
         # Softmax
         logits_max = np.max(logits, axis=-1, keepdims=True)
         exp_logits = np.exp(logits - logits_max)
@@ -452,17 +484,17 @@ class MLMHeadLayer:
     def backward(self, targets: np.ndarray) -> np.ndarray:
         """targets shape: (num_masked,). Computes loss gradients and returns gradient on full input dx."""
         num_masked = len(targets)
-        
+
         # Gradient with respect to logits: P - Y
         d_logits = self.last_probs.copy()
         d_logits[np.arange(num_masked), targets] -= 1.0
         # Average over batch scale
         d_logits /= num_masked
-        
+
         # Gradients on weights
         self.dW = self.last_x.T @ d_logits
         self.db = np.sum(d_logits, axis=0)
-        
+
         # Gradient on masked input states dx: (num_masked, D)
         d_x_masked = d_logits @ self.W.T
         return d_x_masked
@@ -471,20 +503,35 @@ class MLMHeadLayer:
 class DNATransformerEncoder:
     """DNA Transformer Encoder pre-trained via self-supervised Masked Language Modeling."""
 
-    def __init__(self, vocab_size: int = 8, embed_dim: int = 16, num_heads: int = 2, hidden_dim: int = 32, max_len: int = 24, pretrained_weights_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        vocab_size: int = 8,
+        embed_dim: int = 16,
+        num_heads: int = 2,
+        hidden_dim: int = 32,
+        max_len: int = 24,
+        pretrained_weights_path: Optional[str] = None,
+    ) -> None:
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
         self.max_len = max_len
         self.pretrained_loaded = False
-        
+
         self.tokenizer = DNASequenceTokenizer(max_len=max_len)
         self.emb = EmbeddingLayer(vocab_size, embed_dim)
         self.pe = get_sinusoidal_positional_encoding(max_len, embed_dim)
         self.block = TransformerEncoderBlock(embed_dim, num_heads, hidden_dim)
         self.mlm_head = MLMHeadLayer(embed_dim, vocab_size)
-        
+
         # Parameter indexing for Adam optimizer
-        self.layers = [self.emb, self.block.attn, self.block.ff, self.block.ln1, self.block.ln2, self.mlm_head]
+        self.layers = [
+            self.emb,
+            self.block.attn,
+            self.block.ff,
+            self.block.ln1,
+            self.block.ln2,
+            self.mlm_head,
+        ]
 
         # Load pre-trained weights if available
         if pretrained_weights_path is not None:
@@ -494,11 +541,17 @@ class DNATransformerEncoder:
                         weights_data = json.load(f)
                     self.from_dict(weights_data)
                     self.pretrained_loaded = True
-                    logger.info(f"Successfully loaded pre-trained DNA Transformer weights from {pretrained_weights_path}")
+                    logger.info(
+                        f"Successfully loaded pre-trained DNA Transformer weights from {pretrained_weights_path}"
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to load pre-trained DNA Transformer weights from {pretrained_weights_path}: {e}. Falling back to random initialization.")
+                    logger.warning(
+                        f"Failed to load pre-trained DNA Transformer weights from {pretrained_weights_path}: {e}. Falling back to random initialization."
+                    )
             else:
-                logger.warning(f"Pre-trained weights file not found at {pretrained_weights_path}. Running with random initialization.")
+                logger.warning(
+                    f"Pre-trained weights file not found at {pretrained_weights_path}. Running with random initialization."
+                )
 
     def forward(self, token_ids: np.ndarray) -> np.ndarray:
         """Runs sequence of token IDs through the encoder. Returns shape (B, T, D)."""
@@ -516,16 +569,22 @@ class DNATransformerEncoder:
         inputs = tokens[np.newaxis, :]
         states = self.forward(inputs)
         # Mean pool over all non-padding tokens
-        non_pad_mask = (tokens != self.tokenizer.vocab["<pad>"])
+        non_pad_mask = tokens != self.tokenizer.vocab["<pad>"]
         valid_states = states[0, non_pad_mask]
         mean_embedding = np.mean(valid_states, axis=0)
         return mean_embedding
 
-    def pretrain_on_sequences(self, sequences: List[str], epochs: int = 10, batch_size: int = 64, lr: float = 0.005) -> List[float]:
+    def pretrain_on_sequences(
+        self,
+        sequences: List[str],
+        epochs: int = 10,
+        batch_size: int = 64,
+        lr: float = 0.005,
+    ) -> List[float]:
         """Pre-trains the model via Masked Language Modeling on a list of DNA sequences."""
         optimizer = AdamOptimizer(lr=lr)
         loss_history = []
-        
+
         # Setup tokens dataset
         encoded_tokens = []
         for seq in sequences:
@@ -543,19 +602,19 @@ class DNATransformerEncoder:
             indices = np.arange(N)
             np.random.shuffle(indices)
             dataset = dataset[indices]
-            
+
             epoch_losses = []
-            
+
             for start_idx in range(0, N, batch_size):
                 end_idx = min(start_idx + batch_size, N)
                 batch = dataset[start_idx:end_idx].copy()
                 B, T = batch.shape
-                
+
                 # 1. Randomly mask 15% of non-special/non-padding tokens
                 masked_positions_b = []
                 masked_positions_t = []
                 targets = []
-                
+
                 for b in range(B):
                     for t in range(T):
                         tok = batch[b, t]
@@ -566,71 +625,86 @@ class DNATransformerEncoder:
                                 masked_positions_t.append(t)
                                 targets.append(tok)
                                 batch[b, t] = mask_token
-                                
+
                 if len(targets) == 0:
                     continue
-                    
-                masked_positions = (np.array(masked_positions_b), np.array(masked_positions_t))
+
+                masked_positions = (
+                    np.array(masked_positions_b),
+                    np.array(masked_positions_t),
+                )
                 targets = np.array(targets, dtype=np.int32)
-                
+
                 # 2. Forward pass
                 hidden_states = self.forward(batch)
                 probs = self.mlm_head.forward(hidden_states, masked_positions)
-                
+
                 # 3. Compute loss
                 num_masked = len(targets)
                 loss = -np.mean(np.log(probs[np.arange(num_masked), targets] + 1e-12))
                 epoch_losses.append(loss)
-                
+
                 # 4. Backward pass
                 d_x_masked = self.mlm_head.backward(targets)
-                
+
                 # Reconstruct full dx gradient shape (B, T, D)
                 d_hidden = np.zeros_like(hidden_states)
                 d_hidden[masked_positions] = d_x_masked
-                
+
                 # Propagate back through block and embedding
                 d_emb = self.block.backward(d_hidden)
                 self.emb.backward(d_emb)
-                
+
                 # 5. Optimizer step
                 optimizer.t += 1
                 param_id = 0
-                
+
                 # MultiHeadAttention parameters
                 attn = self.block.attn
-                for p, gp in [(attn.W_q, attn.dW_q), (attn.b_q, attn.db_q),
-                             (attn.W_k, attn.dW_k), (attn.b_k, attn.db_k),
-                             (attn.W_v, attn.dW_v), (attn.b_v, attn.db_v),
-                             (attn.W_o, attn.dW_o), (attn.b_o, attn.db_o)]:
+                for p, gp in [
+                    (attn.W_q, attn.dW_q),
+                    (attn.b_q, attn.db_q),
+                    (attn.W_k, attn.dW_k),
+                    (attn.b_k, attn.db_k),
+                    (attn.W_v, attn.dW_v),
+                    (attn.b_v, attn.db_v),
+                    (attn.W_o, attn.dW_o),
+                    (attn.b_o, attn.db_o),
+                ]:
                     optimizer.step(p, gp, param_id)
                     param_id += 1
-                    
+
                 # Feedforward parameters
                 ff = self.block.ff
-                for p, gp in [(ff.W1, ff.dW1), (ff.b1, ff.db1),
-                             (ff.W2, ff.dW2), (ff.b2, ff.db2)]:
+                for p, gp in [
+                    (ff.W1, ff.dW1),
+                    (ff.b1, ff.db1),
+                    (ff.W2, ff.dW2),
+                    (ff.b2, ff.db2),
+                ]:
                     optimizer.step(p, gp, param_id)
                     param_id += 1
-                    
+
                 # LN parameters
                 for ln in [self.block.ln1, self.block.ln2]:
                     for p, gp in [(ln.gamma, ln.dgamma), (ln.beta, ln.dbeta)]:
                         optimizer.step(p, gp, param_id)
                         param_id += 1
-                        
+
                 # Embedding parameters
                 optimizer.step(self.emb.W, self.emb.dW, param_id)
                 param_id += 1
-                
+
                 # MLM Head parameters
                 optimizer.step(self.mlm_head.W, self.mlm_head.dW, param_id)
                 param_id += 1
 
             mean_loss = float(np.mean(epoch_losses)) if epoch_losses else 0.0
             loss_history.append(mean_loss)
-            logger.info(f"MLM Pre-training Epoch {epoch+1}/{epochs} | Average Loss: {mean_loss:.4f}")
-            
+            logger.info(
+                f"MLM Pre-training Epoch {epoch+1}/{epochs} | Average Loss: {mean_loss:.4f}"
+            )
+
         return loss_history
 
     def to_dict(self) -> Dict[str, Any]:
@@ -654,14 +728,31 @@ class DNATransformerEncoder:
             "ln2_gamma": self.block.ln2.gamma.tolist(),
             "ln2_beta": self.block.ln2.beta.tolist(),
             "mlm_W": self.mlm_head.W.tolist(),
-            "mlm_b": self.mlm_head.b.tolist()
+            "mlm_b": self.mlm_head.b.tolist(),
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
         """Loads weights from a serialized dictionary with strict shape and key validation."""
         required_keys = [
-            "emb_W", "attn_W_q", "attn_b_q", "attn_W_k", "attn_b_k", "attn_W_v", "attn_b_v", "attn_W_o", "attn_b_o",
-            "ff_W1", "ff_b1", "ff_W2", "ff_b2", "ln1_gamma", "ln1_beta", "ln2_gamma", "ln2_beta", "mlm_W", "mlm_b"
+            "emb_W",
+            "attn_W_q",
+            "attn_b_q",
+            "attn_W_k",
+            "attn_b_k",
+            "attn_W_v",
+            "attn_b_v",
+            "attn_W_o",
+            "attn_b_o",
+            "ff_W1",
+            "ff_b1",
+            "ff_W2",
+            "ff_b2",
+            "ln1_gamma",
+            "ln1_beta",
+            "ln2_gamma",
+            "ln2_beta",
+            "mlm_W",
+            "mlm_b",
         ]
         for key in required_keys:
             if key not in data:
@@ -669,7 +760,9 @@ class DNATransformerEncoder:
 
         def check_shape(name: str, arr: np.ndarray, expected: Tuple[int, ...]) -> None:
             if arr.shape != expected:
-                raise ValueError(f"Shape mismatch for '{name}': expected {expected}, got {arr.shape}")
+                raise ValueError(
+                    f"Shape mismatch for '{name}': expected {expected}, got {arr.shape}"
+                )
 
         emb_W = np.array(data["emb_W"], dtype=np.float32)
         check_shape("emb_W", emb_W, (self.vocab_size, self.embed_dim))
@@ -755,15 +848,16 @@ class DNATransformerEncoder:
             np.ndarray: Shape (embed_dim,) = (16,). The [CLS] hidden state.
         """
         tokens = self.tokenizer.encode(seq, add_special_tokens=True)
-        inputs = tokens[np.newaxis, :]              # (1, T)
-        states = self.forward(inputs)               # (1, T, D)
-        cls_embedding = states[0, 0, :]             # position 0 = [CLS]
-        return cls_embedding.astype(np.float32)     # (16,)
+        inputs = tokens[np.newaxis, :]  # (1, T)
+        states = self.forward(inputs)  # (1, T, D)
+        cls_embedding = states[0, 0, :]  # position 0 = [CLS]
+        return cls_embedding.astype(np.float32)  # (16,)
 
 
 # ---------------------------------------------------------------------------
 # Fine-Tune Classification Head (Devlin 2019 BERT-style task fine-tuning)
 # ---------------------------------------------------------------------------
+
 
 class FineTuneClassificationHead:
     """2-layer MLP classification head on top of the [CLS] transformer embedding.
@@ -827,9 +921,13 @@ class FineTuneClassificationHead:
         rng = np.random.RandomState(seed)
 
         # He initialization for ReLU layers (He et al. 2015)
-        self.W1 = rng.normal(0, np.sqrt(2.0 / input_dim), (input_dim, hidden_dim)).astype(np.float32)
+        self.W1 = rng.normal(
+            0, np.sqrt(2.0 / input_dim), (input_dim, hidden_dim)
+        ).astype(np.float32)
         self.b1 = np.zeros(hidden_dim, dtype=np.float32)
-        self.W2 = rng.normal(0, np.sqrt(2.0 / hidden_dim), (hidden_dim, 1)).astype(np.float32)
+        self.W2 = rng.normal(0, np.sqrt(2.0 / hidden_dim), (hidden_dim, 1)).astype(
+            np.float32
+        )
         self.b2 = np.zeros(1, dtype=np.float32)
 
         self.lr = lr
@@ -881,8 +979,8 @@ class FineTuneClassificationHead:
         self._last_cls = cls_embedding.copy()
 
         # Layer 1: Dense + ReLU
-        pre_h = cls_embedding @ self.W1 + self.b1       # (hidden_dim,)
-        h = np.maximum(0.0, pre_h)                       # ReLU
+        pre_h = cls_embedding @ self.W1 + self.b1  # (hidden_dim,)
+        h = np.maximum(0.0, pre_h)  # ReLU
 
         # Dropout (Bernoulli mask, scaling factor 1/(1-p))
         if training and self.dropout_rate > 0.0:
@@ -930,11 +1028,11 @@ class FineTuneClassificationHead:
         d_logit = p - label
 
         # Layer 2 gradients
-        dW2 = d_logit * h.reshape(-1, 1)        # (hidden_dim, 1)
+        dW2 = d_logit * h.reshape(-1, 1)  # (hidden_dim, 1)
         db2 = np.array([d_logit])
 
         # Gradient through Layer 2 → hidden
-        d_h = d_logit * self.W2.flatten()        # (hidden_dim,)
+        d_h = d_logit * self.W2.flatten()  # (hidden_dim,)
 
         # Gradient through dropout
         d_h = d_h * mask / max(1.0 - self.dropout_rate, 1e-7)
@@ -943,7 +1041,7 @@ class FineTuneClassificationHead:
         d_pre_h = d_h * (pre_h > 0).astype(np.float32)
 
         # Layer 1 gradients
-        dW1 = np.outer(cls_embedding, d_pre_h)   # (input_dim, hidden_dim)
+        dW1 = np.outer(cls_embedding, d_pre_h)  # (input_dim, hidden_dim)
         db1 = d_pre_h
 
         return {"W1": dW1, "b1": db1, "W2": dW2, "b2": db2}
@@ -968,9 +1066,9 @@ class FineTuneClassificationHead:
             θ_t = θ_{t-1} - α · m̂ / (√v̂ + ε)
         """
         m[:] = self._beta1 * m + (1 - self._beta1) * grad
-        v[:] = self._beta2 * v + (1 - self._beta2) * (grad ** 2)
-        m_hat = m / (1 - self._beta1 ** t)
-        v_hat = v / (1 - self._beta2 ** t)
+        v[:] = self._beta2 * v + (1 - self._beta2) * (grad**2)
+        m_hat = m / (1 - self._beta1**t)
+        v_hat = v / (1 - self._beta2**t)
         param -= self.lr * m_hat / (np.sqrt(v_hat) + self._eps)
 
     def _clip_grad(self, grad: np.ndarray) -> np.ndarray:
@@ -1037,7 +1135,7 @@ class FineTuneClassificationHead:
             epoch_losses = []
 
             for start in range(0, N, batch_size):
-                batch_idx = indices[start:start + batch_size]
+                batch_idx = indices[start : start + batch_size]
                 batch_loss = 0.0
 
                 # Accumulate gradients over the mini-batch

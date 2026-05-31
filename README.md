@@ -133,11 +133,17 @@ Ensures spatial read-depth uniformity across viral whole-genome tiling or long a
 
 ## 🚀 Installation & Setup
 
-### Prerequisites
+### 📦 Standard PyPI Installation
+To install the latest release directly from PyPI:
+```bash
+pip install primerforge
+```
+
+### 🛠️ Developer / Standalone Installation
+For local development, manual customizations, or running the Streamlit web dashboard:
 *   Python **3.11** or **3.12**
 *   [Poetry](https://python-poetry.org/) (for environment management and dependency locking)
 
-### Standalone Installation
 ```bash
 # Clone the repository
 git clone https://github.com/Rashidmstar12/PrimerForge.git
@@ -202,6 +208,49 @@ poetry run python fine_tune.py \
 poetry run primerforge design \
   --target "TARGET_SEQUENCE" \
   --model-dir models/my_lab_model
+```
+
+---
+
+## 💻 Programmatic Library Integration (API)
+
+PrimerForge is built to be a highly modular Python library, integrating standard `primer3` (via the `primer3-py` package) for biophysical candidate generation under the hood and wrapping it with pangenome-aware specificity checking and stacked machine learning scoring.
+
+You can import and register `primerforge`'s core engines directly in your own tools:
+
+```python
+from primerforge import BiophysicsEngine, MLScorer, MultiplexOptimizer
+
+# 1. Initialize biophysics engine with standard salt concentrations
+engine = BiophysicsEngine(opt_tm=60.0, salt_monovalent=50.0)
+
+# 2. Design candidate primer pairs using wrapped primer3 bindings
+candidates = engine.generate_candidates(
+    target_sequence="CACCATTGGCAATGAGCGGTTCCGCTGCCCTGAGGCACTCTTCCAGCCTTCCTTCCTGGGCATGGAGTCCT",
+    num_return=5
+)
+
+# 3. Load the stacked machine learning success predictor
+scorer = MLScorer(model_path="models/primerforge_lightgbm.model")
+
+# 4. Score pairs and run Integer Linear Programming (ILP) panel optimization
+evaluated_pairs = []
+for pair in candidates:
+    prob = scorer.predict_success(pair)
+    evaluated_pairs.append({
+        "pair": pair,
+        "predicted_success": prob,
+        "is_valid": True,
+        "off_targets": 0
+    })
+
+# 5. Math optimization: select compatible dimer-free multiplex panels
+optimizer = MultiplexOptimizer(engine)
+selected_panel, obj_val = optimizer.optimize_panel(
+    evaluated_pairs, max_plex=3, delta_g_threshold=-4.5
+)
+
+print(f"Optimal panel assembled with {len(selected_panel)} compatible loci!")
 ```
 
 ---

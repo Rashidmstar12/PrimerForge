@@ -33,6 +33,7 @@ from primerforge.secondary_structure import (
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def make_folder() -> AmpliconFolder:
     return AmpliconFolder()
 
@@ -40,23 +41,36 @@ def make_folder() -> AmpliconFolder:
 def make_primer_pair(f_seq: str, r_seq: str, product_size: int = 100):
     """Builds a minimal PrimerPair for extract_features() integration tests."""
     from primerforge.biophysics import BiophysicsEngine, PrimerSequence, PrimerPair
+
     engine = BiophysicsEngine()
     f_th = engine.calculate_thermo_features(f_seq)
     r_th = engine.calculate_thermo_features(r_seq)
     f_gc = 100.0 * sum(1 for b in f_seq.upper() if b in "GC") / len(f_seq)
     r_gc = 100.0 * sum(1 for b in r_seq.upper() if b in "GC") / len(r_seq)
     fwd = PrimerSequence(
-        sequence=f_seq, start=0, length=len(f_seq), tm=f_th["tm"],
-        gc_percent=f_gc, hairpin_dg=f_th["hairpin_dg"],
-        homodimer_dg=f_th["homodimer_dg"], penalty=0.5,
+        sequence=f_seq,
+        start=0,
+        length=len(f_seq),
+        tm=f_th["tm"],
+        gc_percent=f_gc,
+        hairpin_dg=f_th["hairpin_dg"],
+        homodimer_dg=f_th["homodimer_dg"],
+        penalty=0.5,
     )
     rev = PrimerSequence(
-        sequence=r_seq, start=product_size, length=len(r_seq), tm=r_th["tm"],
-        gc_percent=r_gc, hairpin_dg=r_th["hairpin_dg"],
-        homodimer_dg=r_th["homodimer_dg"], penalty=0.5,
+        sequence=r_seq,
+        start=product_size,
+        length=len(r_seq),
+        tm=r_th["tm"],
+        gc_percent=r_gc,
+        hairpin_dg=r_th["hairpin_dg"],
+        homodimer_dg=r_th["homodimer_dg"],
+        penalty=0.5,
     )
     return PrimerPair(
-        forward=fwd, reverse=rev, product_size=product_size,
+        forward=fwd,
+        reverse=rev,
+        product_size=product_size,
         cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq),
         penalty=0.5,
     )
@@ -65,6 +79,7 @@ def make_primer_pair(f_seq: str, r_seq: str, product_size: int = 100):
 # ---------------------------------------------------------------------------
 # Test 1: Poly-A has MFE ≈ 0 (no WC pairs)
 # ---------------------------------------------------------------------------
+
 
 def test_polya_has_zero_mfe() -> None:
     """Poly-A (N=40) cannot form Watson-Crick base pairs, so MFE must be 0.
@@ -88,6 +103,7 @@ def test_polyt_has_zero_mfe() -> None:
 # Test 2: Perfect palindrome has deeply negative MFE
 # ---------------------------------------------------------------------------
 
+
 def test_palindrome_has_negative_mfe() -> None:
     """A perfect palindromic sequence forms a stable hairpin with negative MFE.
 
@@ -99,14 +115,13 @@ def test_palindrome_has_negative_mfe() -> None:
     # GCATGC is self-complementary (palindrome): G-C, C-G, A-T, T-A, G-C, C-G
     palindrome = "GCATGCATGCGCATGCATGC"
     mfe = folder.compute_mfe(palindrome)
-    assert mfe < -1.0, (
-        f"Palindromic sequence should have MFE < -1.0, got {mfe:.4f}"
-    )
+    assert mfe < -1.0, f"Palindromic sequence should have MFE < -1.0, got {mfe:.4f}"
 
 
 # ---------------------------------------------------------------------------
 # Test 3: MFE is always ≤ 0
 # ---------------------------------------------------------------------------
+
 
 def test_mfe_always_nonpositive() -> None:
     """MFE must be ≤ 0 for any DNA sequence (structure can only be stabilizing).
@@ -115,6 +130,7 @@ def test_mfe_always_nonpositive() -> None:
     Base pairing adds negative (stabilizing) energy. Therefore MFE ≤ 0 always.
     """
     import random
+
     random.seed(42)
     folder = make_folder()
     bases = "ATGC"
@@ -122,37 +138,35 @@ def test_mfe_always_nonpositive() -> None:
         length = random.randint(5, 60)
         seq = "".join(random.choices(bases, k=length))
         mfe = folder.compute_mfe(seq)
-        assert mfe <= 1e-9, (
-            f"MFE must be ≤ 0 for seq='{seq[:20]}...', got {mfe:.4f}"
-        )
+        assert mfe <= 1e-9, f"MFE must be ≤ 0 for seq='{seq[:20]}...', got {mfe:.4f}"
 
 
 # ---------------------------------------------------------------------------
 # Test 4: MFE is finite for all inputs
 # ---------------------------------------------------------------------------
 
+
 def test_mfe_is_finite() -> None:
     """Verifies that MFE is always a finite float — no NaN or Inf."""
     folder = make_folder()
     test_seqs = [
-        "AT",                           # minimal 2-mer
+        "AT",  # minimal 2-mer
         "GCGCGCGCGCGCGCGCGCGCGCGCGCGC",  # 28-mer GC repeat
-        "ATATATATATATATAT",              # 16-mer AT alternating
-        "AAAAAAAAAAAAAAAAAAAAAAAA",       # 24-mer poly-A
-        "GCATGCATGCATGCATGCATGC",         # 22-mer mixed
-        "TTTTTTTTTTTTTTTTTTTT",          # 20-mer poly-T
+        "ATATATATATATATAT",  # 16-mer AT alternating
+        "AAAAAAAAAAAAAAAAAAAAAAAA",  # 24-mer poly-A
+        "GCATGCATGCATGCATGCATGC",  # 22-mer mixed
+        "TTTTTTTTTTTTTTTTTTTT",  # 20-mer poly-T
     ]
     for seq in test_seqs:
         mfe = folder.compute_mfe(seq)
-        assert math.isfinite(mfe), (
-            f"MFE={mfe} is not finite for seq='{seq[:20]}'"
-        )
+        assert math.isfinite(mfe), f"MFE={mfe} is not finite for seq='{seq[:20]}'"
         assert isinstance(mfe, float), f"Expected float, got {type(mfe)}"
 
 
 # ---------------------------------------------------------------------------
 # Test 5: MFE monotonicity (longer ≤ shorter)
 # ---------------------------------------------------------------------------
+
 
 def test_mfe_monotone_with_length() -> None:
     """MFE of seq[:N] ≥ MFE of seq[:N+k] for any valid extension.
@@ -179,6 +193,7 @@ def test_mfe_monotone_with_length() -> None:
 # Test 6: GC-rich sequences more negative MFE than AT-rich
 # ---------------------------------------------------------------------------
 
+
 def test_gc_rich_more_negative_mfe() -> None:
     """GC-rich amplicons form stronger secondary structure than AT-rich ones.
 
@@ -190,14 +205,15 @@ def test_gc_rich_more_negative_mfe() -> None:
     at_rich = "ATATATATATATATATATATATATATATATATATATATATAT"  # 42-mer AT repeat
     mfe_gc = folder.compute_mfe(gc_rich)
     mfe_at = folder.compute_mfe(at_rich)
-    assert mfe_gc < mfe_at, (
-        f"GC-rich MFE ({mfe_gc:.3f}) must be < AT-rich MFE ({mfe_at:.3f})"
-    )
+    assert (
+        mfe_gc < mfe_at
+    ), f"GC-rich MFE ({mfe_gc:.3f}) must be < AT-rich MFE ({mfe_at:.3f})"
 
 
 # ---------------------------------------------------------------------------
 # Test 7: Dot-bracket structure has matched parentheses
 # ---------------------------------------------------------------------------
+
 
 def test_dot_bracket_balanced() -> None:
     """Verifies dot-bracket notation has matched parentheses."""
@@ -213,20 +229,21 @@ def test_dot_bracket_balanced() -> None:
         n_open = dot_bracket.count("(")
         n_close = dot_bracket.count(")")
         n_dots = dot_bracket.count(".")
-        assert n_open == n_close, (
-            f"Unbalanced brackets in '{dot_bracket}': {n_open} open, {n_close} close"
-        )
-        assert n_open + n_close + n_dots == len(seq), (
-            f"Structure length {n_open+n_close+n_dots} ≠ seq length {len(seq)}"
-        )
-        assert all(c in "()." for c in dot_bracket), (
-            f"Invalid character in dot-bracket: '{dot_bracket}'"
-        )
+        assert (
+            n_open == n_close
+        ), f"Unbalanced brackets in '{dot_bracket}': {n_open} open, {n_close} close"
+        assert n_open + n_close + n_dots == len(
+            seq
+        ), f"Structure length {n_open+n_close+n_dots} ≠ seq length {len(seq)}"
+        assert all(
+            c in "()." for c in dot_bracket
+        ), f"Invalid character in dot-bracket: '{dot_bracket}'"
 
 
 # ---------------------------------------------------------------------------
 # Test 8: fold() returns three values in valid ranges
 # ---------------------------------------------------------------------------
+
 
 def test_fold_returns_valid_ranges() -> None:
     """Verifies AmpliconFolder.fold() returns (mfe, frac_paired, largest_loop) in valid ranges."""
@@ -242,25 +259,27 @@ def test_fold_returns_valid_ranges() -> None:
         assert math.isfinite(mfe), f"MFE not finite: {mfe}"
         assert mfe <= 1e-9, f"MFE={mfe:.4f} must be ≤ 0"
 
-        assert 0.0 <= frac_paired <= 1.0, (
-            f"frac_paired={frac_paired:.4f} must be in [0, 1]"
-        )
+        assert (
+            0.0 <= frac_paired <= 1.0
+        ), f"frac_paired={frac_paired:.4f} must be in [0, 1]"
 
-        assert isinstance(largest_loop, int), (
-            f"largest_loop must be int, got {type(largest_loop)}"
-        )
-        assert 0 <= largest_loop <= len(seq), (
-            f"largest_loop={largest_loop} > len(seq)={len(seq)}"
-        )
+        assert isinstance(
+            largest_loop, int
+        ), f"largest_loop must be int, got {type(largest_loop)}"
+        assert (
+            0 <= largest_loop <= len(seq)
+        ), f"largest_loop={largest_loop} > len(seq)={len(seq)}"
 
 
 # ---------------------------------------------------------------------------
 # Test 9: frac_paired ∈ [0, 1]
 # ---------------------------------------------------------------------------
 
+
 def test_frac_paired_range() -> None:
     """Verifies frac_paired is always in [0, 1] across diverse sequences."""
     import random
+
     random.seed(123)
     folder = make_folder()
     bases = "ATGC"
@@ -268,14 +287,15 @@ def test_frac_paired_range() -> None:
         length = random.randint(4, 80)
         seq = "".join(random.choices(bases, k=length))
         _, frac_paired, _ = folder.fold(seq)
-        assert 0.0 <= frac_paired <= 1.0, (
-            f"frac_paired={frac_paired:.4f} out of [0,1] for seq='{seq[:20]}...'"
-        )
+        assert (
+            0.0 <= frac_paired <= 1.0
+        ), f"frac_paired={frac_paired:.4f} out of [0,1] for seq='{seq[:20]}...'"
 
 
 # ---------------------------------------------------------------------------
 # Test 10: extract_features() target_mfe is not hardcoded -5.0
 # ---------------------------------------------------------------------------
+
 
 def test_extract_features_mfe_is_not_stub() -> None:
     """Verifies extract_features() target_mfe is computed (not hardcoded -5.0).
@@ -320,9 +340,9 @@ def test_extract_features_mfe_is_not_stub() -> None:
     )
 
     # GC-rich should have more negative MFE (more secondary structure)
-    assert mfe_gc < mfe_at, (
-        f"GC-rich target_mfe ({mfe_gc:.3f}) should be < AT-rich ({mfe_at:.3f})"
-    )
+    assert (
+        mfe_gc < mfe_at
+    ), f"GC-rich target_mfe ({mfe_gc:.3f}) should be < AT-rich ({mfe_at:.3f})"
 
     # Neither should be exactly -5.0 (old stub value)
     assert mfe_gc != -5.0, "target_mfe is still the hardcoded stub -5.0"

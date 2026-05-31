@@ -41,7 +41,7 @@ def test_biophysical_oracle(mock_pair) -> None:
         "f_var_dist": 20.0,
         "r_var_dist": 20.0,
         "f_var_maf": 0.0,
-        "r_var_maf": 0.0
+        "r_var_maf": 0.0,
     }
     outcome_clean = oracle.evaluate(mock_pair, spec_clean, deterministic=True)
     assert outcome_clean == 1
@@ -53,7 +53,7 @@ def test_biophysical_oracle(mock_pair) -> None:
         "f_var_dist": 1.0,
         "r_var_dist": 1.0,
         "f_var_maf": 0.99,
-        "r_var_maf": 0.99
+        "r_var_maf": 0.99,
     }
     outcome_bad = oracle.evaluate(mock_pair, spec_bad, deterministic=True)
     assert outcome_bad == 0
@@ -67,21 +67,19 @@ def test_active_learning_engine(scorer: MLScorer, mock_pair) -> None:
     # Create dummy pool data
     spec1 = {"f_off_targets": 0, "r_off_targets": 0}
     spec2 = {"f_off_targets": 2, "r_off_targets": 1}
-    spec3 = {"f_off_targets": 0, "r_off_targets": 0, "r_var_dist": 2.0, "r_var_maf": 0.8}
+    spec3 = {
+        "f_off_targets": 0,
+        "r_off_targets": 0,
+        "r_var_dist": 2.0,
+        "r_var_maf": 0.8,
+    }
 
-    unlabeled = [
-        (mock_pair, spec1),
-        (mock_pair, spec2),
-        (mock_pair, spec3)
-    ]
+    unlabeled = [(mock_pair, spec1), (mock_pair, spec2), (mock_pair, spec3)]
     engine.load_unlabeled_pool(unlabeled)
     assert len(engine.unlabeled_pool) == 3
 
     # Initial seed data
-    initial_seeds = [
-        (mock_pair, spec1, 1),
-        (mock_pair, spec2, 0)
-    ]
+    initial_seeds = [(mock_pair, spec1, 1), (mock_pair, spec2, 0)]
     engine.load_initial_labeled_data(initial_seeds)
     assert len(engine.labeled_pool) == 2
 
@@ -93,7 +91,9 @@ def test_active_learning_engine(scorer: MLScorer, mock_pair) -> None:
         assert np.all(~np.isnan(scores))
 
     # Query next batch
-    queried = engine.query_and_label_next_batch(batch_size=2, strategy="entropy", deterministic=True)
+    queried = engine.query_and_label_next_batch(
+        batch_size=2, strategy="entropy", deterministic=True
+    )
     assert len(queried) == 2
     assert len(engine.unlabeled_pool) == 1
     assert len(engine.labeled_pool) == 4
@@ -106,10 +106,10 @@ def test_active_learning_engine(scorer: MLScorer, mock_pair) -> None:
         (mock_pair, spec1, 1),
         (mock_pair, spec2, 0),
         (mock_pair, spec2, 0),
-        (mock_pair, spec2, 0)
+        (mock_pair, spec2, 0),
     ]
     engine.load_initial_labeled_data(extra_data)
-    
+
     # Run retraining
     engine.retrain_ensemble()
 

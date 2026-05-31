@@ -37,6 +37,7 @@ from primerforge.biophysics import BiophysicsEngine, PrimerSequence, PrimerPair
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def make_mlp() -> NumPyMLPRegressor:
     """Returns a small initialized MLP."""
     mlp = NumPyMLPRegressor(input_dim=32, hidden_dim=16)
@@ -61,18 +62,31 @@ def make_primer_pair(
     f_gc = 100.0 * sum(1 for b in f_seq.upper() if b in "GC") / len(f_seq)
     r_gc = 100.0 * sum(1 for b in r_seq.upper() if b in "GC") / len(r_seq)
     fwd = PrimerSequence(
-        sequence=f_seq, start=0, length=len(f_seq),
-        tm=f_th["tm"], gc_percent=f_gc,
-        hairpin_dg=f_th["hairpin_dg"], homodimer_dg=f_th["homodimer_dg"], penalty=0.0,
+        sequence=f_seq,
+        start=0,
+        length=len(f_seq),
+        tm=f_th["tm"],
+        gc_percent=f_gc,
+        hairpin_dg=f_th["hairpin_dg"],
+        homodimer_dg=f_th["homodimer_dg"],
+        penalty=0.0,
     )
     rev = PrimerSequence(
-        sequence=r_seq, start=product_size, length=len(r_seq),
-        tm=r_th["tm"], gc_percent=r_gc,
-        hairpin_dg=r_th["hairpin_dg"], homodimer_dg=r_th["homodimer_dg"], penalty=0.0,
+        sequence=r_seq,
+        start=product_size,
+        length=len(r_seq),
+        tm=r_th["tm"],
+        gc_percent=r_gc,
+        hairpin_dg=r_th["hairpin_dg"],
+        homodimer_dg=r_th["homodimer_dg"],
+        penalty=0.0,
     )
     return PrimerPair(
-        forward=fwd, reverse=rev, product_size=product_size,
-        cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq), penalty=0.0,
+        forward=fwd,
+        reverse=rev,
+        product_size=product_size,
+        cross_dimer_dg=engine.calculate_heterodimer_dg(f_seq, r_seq),
+        penalty=0.0,
     )
 
 
@@ -88,6 +102,7 @@ def make_synthetic_data(n: int = 100, seed: int = 42):
 # Test 1: Fisher FIM produces finite, non-negative arrays with correct shapes
 # ---------------------------------------------------------------------------
 
+
 def test_fisher_shapes_and_finiteness() -> None:
     """Verifies Fisher FIM has correct shapes and all values are finite and >= 0."""
     mlp = make_mlp()
@@ -102,7 +117,9 @@ def test_fisher_shapes_and_finiteness() -> None:
     assert "trunk_l1_W" in fisher.fisher_mt, "Fisher MT must contain 'trunk_l1_W' key"
 
     for name, arr in fisher.fisher_mlp.items():
-        assert np.all(np.isfinite(arr)), f"Fisher MLP[{name}] contains non-finite values"
+        assert np.all(
+            np.isfinite(arr)
+        ), f"Fisher MLP[{name}] contains non-finite values"
         assert np.all(arr >= 0.0), f"Fisher MLP[{name}] contains negative values"
 
     for name, arr in fisher.fisher_mt.items():
@@ -115,6 +132,7 @@ def test_fisher_shapes_and_finiteness() -> None:
 # ---------------------------------------------------------------------------
 # Test 2: Fisher values are non-trivially positive (not all zeros)
 # ---------------------------------------------------------------------------
+
 
 def test_fisher_nonzero() -> None:
     """Verifies Fisher FIM has non-zero entries (model responds to data)."""
@@ -137,6 +155,7 @@ def test_fisher_nonzero() -> None:
 # Test 3: EWC penalty is zero before anchoring, positive after
 # ---------------------------------------------------------------------------
 
+
 def test_ewc_penalty_before_and_after_anchor() -> None:
     """Verifies EWC penalty is 0 before anchor and > 0 after anchor + Fisher."""
     mlp = make_mlp()
@@ -145,7 +164,9 @@ def test_ewc_penalty_before_and_after_anchor() -> None:
 
     # Before anchor: penalty must be 0
     penalty_before = ewc.compute_penalty(mlp, head)
-    assert penalty_before == 0.0, f"Pre-anchor EWC penalty should be 0, got {penalty_before}"
+    assert (
+        penalty_before == 0.0
+    ), f"Pre-anchor EWC penalty should be 0, got {penalty_before}"
 
     # Anchor + estimate Fisher
     X, y_success, y_ct, y_yield, y_melt = make_synthetic_data(n=50)
@@ -157,12 +178,15 @@ def test_ewc_penalty_before_and_after_anchor() -> None:
     head.trunk_l2.W += np.random.randn(*head.trunk_l2.W.shape).astype(np.float32) * 0.5
 
     penalty_after = ewc.compute_penalty(mlp, head)
-    assert penalty_after > 0.0, f"Post-anchor EWC penalty should be > 0 after perturbation, got {penalty_after}"
+    assert (
+        penalty_after > 0.0
+    ), f"Post-anchor EWC penalty should be > 0 after perturbation, got {penalty_after}"
 
 
 # ---------------------------------------------------------------------------
 # Test 4: EWC penalty increases with parameter divergence
 # ---------------------------------------------------------------------------
+
 
 def test_ewc_penalty_increases_with_divergence() -> None:
     """Verifies EWC penalty is monotonically increasing with parameter distance."""
@@ -177,19 +201,22 @@ def test_ewc_penalty_increases_with_divergence() -> None:
     penalties = []
     for scale in [0.0, 0.1, 0.5, 1.0, 2.0]:
         # Apply perturbation from anchor
-        head.trunk_l1.W = ewc.anchor_mt["trunk_l1_W"].copy() + scale * np.ones_like(ewc.anchor_mt["trunk_l1_W"])
+        head.trunk_l1.W = ewc.anchor_mt["trunk_l1_W"].copy() + scale * np.ones_like(
+            ewc.anchor_mt["trunk_l1_W"]
+        )
         penalties.append(ewc.compute_penalty(mlp, head))
 
     # Penalties must be strictly increasing
     for i in range(len(penalties) - 1):
-        assert penalties[i] <= penalties[i + 1], (
-            f"EWC penalty not monotonically increasing: {penalties}"
-        )
+        assert (
+            penalties[i] <= penalties[i + 1]
+        ), f"EWC penalty not monotonically increasing: {penalties}"
 
 
 # ---------------------------------------------------------------------------
 # Test 5: EWC gradient contributions oppose divergence
 # ---------------------------------------------------------------------------
+
 
 def test_ewc_gradients_oppose_divergence() -> None:
     """Verifies EWC gradient sign opposes direction of weight drift from anchor."""
@@ -209,14 +236,15 @@ def test_ewc_gradients_oppose_divergence() -> None:
 
     # Gradient should be positive (opposing the positive drift → pushback towards anchor)
     drift = head.trunk_l1.W - ewc.anchor_mt["trunk_l1_W"]
-    assert np.mean(grads["trunk_l1_W"] * drift) > 0.0, (
-        "EWC gradient must have positive dot product with drift (restoring force)"
-    )
+    assert (
+        np.mean(grads["trunk_l1_W"] * drift) > 0.0
+    ), "EWC gradient must have positive dot product with drift (restoring force)"
 
 
 # ---------------------------------------------------------------------------
 # Test 6: Replay buffer reservoir sampling — uniform coverage
 # ---------------------------------------------------------------------------
+
 
 def test_replay_buffer_reservoir_sampling_uniformity() -> None:
     """Verifies reservoir sampling produces approximately uniform coverage.
@@ -237,13 +265,18 @@ def test_replay_buffer_reservoir_sampling_uniformity() -> None:
 
     # Check that positions are spread across the full [0, 999] range
     positions = [entry[0][0] for entry in list(buf._buffer)]
-    assert min(positions) < 200, f"Buffer missing low-range samples (min={min(positions)})"
-    assert max(positions) > 800, f"Buffer missing high-range samples (max={max(positions)})"
+    assert (
+        min(positions) < 200
+    ), f"Buffer missing low-range samples (min={min(positions)})"
+    assert (
+        max(positions) > 800
+    ), f"Buffer missing high-range samples (max={max(positions)})"
 
 
 # ---------------------------------------------------------------------------
 # Test 7: Replay buffer capacity invariant
 # ---------------------------------------------------------------------------
+
 
 def test_replay_buffer_capacity_invariant() -> None:
     """Verifies buffer never exceeds its declared capacity."""
@@ -252,7 +285,9 @@ def test_replay_buffer_capacity_invariant() -> None:
 
     for i in range(200):
         buf.add(np.zeros(40, dtype=np.float32), 1.0, 25.0, 0.7, 1.0)
-        assert len(buf) <= capacity, f"Buffer exceeded capacity at insert {i}: len={len(buf)}"
+        assert (
+            len(buf) <= capacity
+        ), f"Buffer exceeded capacity at insert {i}: len={len(buf)}"
 
     assert len(buf) == capacity
 
@@ -260,6 +295,7 @@ def test_replay_buffer_capacity_invariant() -> None:
 # ---------------------------------------------------------------------------
 # Test 8: OnlinePlattCalibrator BCE loss decreases over 20 SGD steps
 # ---------------------------------------------------------------------------
+
 
 def test_platt_calibrator_loss_decreases() -> None:
     """Verifies online Platt calibrator reduces BCE loss over 20 update steps."""
@@ -277,14 +313,15 @@ def test_platt_calibrator_loss_decreases() -> None:
 
     early_avg = float(np.mean(losses[:5]))
     late_avg = float(np.mean(losses[-5:]))
-    assert late_avg < early_avg, (
-        f"Platt calibrator BCE must decrease: early={early_avg:.4f}, late={late_avg:.4f}"
-    )
+    assert (
+        late_avg < early_avg
+    ), f"Platt calibrator BCE must decrease: early={early_avg:.4f}, late={late_avg:.4f}"
 
 
 # ---------------------------------------------------------------------------
 # Test 9: OnlinePlattCalibrator output is in (0, 1)
 # ---------------------------------------------------------------------------
+
 
 def test_platt_calibrator_output_range() -> None:
     """Verifies calibrate() always returns a value strictly in (0, 1)."""
@@ -297,6 +334,7 @@ def test_platt_calibrator_output_range() -> None:
 # ---------------------------------------------------------------------------
 # Test 10: FedAvg identity — average of two identical dicts equals itself
 # ---------------------------------------------------------------------------
+
 
 def test_fedavg_identity() -> None:
     """Verifies FedAvg of two identical weight dicts equals those weights."""
@@ -321,6 +359,7 @@ def test_fedavg_identity() -> None:
 # Test 11: FedAvg arithmetic — weighted midpoint of two extreme weight dicts
 # ---------------------------------------------------------------------------
 
+
 def test_fedavg_arithmetic_midpoint() -> None:
     """Verifies FedAvg produces correct arithmetic weighted average of weights."""
     # Create two heads with different trunk_l1.W
@@ -341,9 +380,9 @@ def test_fedavg_arithmetic_midpoint() -> None:
 
     expected_mid = 0.5
     actual_mid = float(np.mean(head_avg.trunk_l1.W))
-    assert abs(actual_mid - expected_mid) < 1e-5, (
-        f"FedAvg midpoint: expected trunk_l1.W mean={expected_mid}, got {actual_mid}"
-    )
+    assert (
+        abs(actual_mid - expected_mid) < 1e-5
+    ), f"FedAvg midpoint: expected trunk_l1.W mean={expected_mid}, got {actual_mid}"
 
     # 2:1 weighted → expected = (0*2 + 1*1) / 3 = 1/3
     averaged_21 = FederatedAverager.average_multitask_weights([w_a, w_b], [2, 1])
@@ -351,14 +390,15 @@ def test_fedavg_arithmetic_midpoint() -> None:
     head_21.from_dict(averaged_21)
     expected_onethird = 1.0 / 3.0
     actual_21 = float(np.mean(head_21.trunk_l1.W))
-    assert abs(actual_21 - expected_onethird) < 1e-5, (
-        f"FedAvg 2:1 weighted midpoint: expected {expected_onethird:.4f}, got {actual_21:.4f}"
-    )
+    assert (
+        abs(actual_21 - expected_onethird) < 1e-5
+    ), f"FedAvg 2:1 weighted midpoint: expected {expected_onethird:.4f}, got {actual_21:.4f}"
 
 
 # ---------------------------------------------------------------------------
 # Test 12: MLScorer.update_from_new_data() returns valid keys, loss decreases
 # ---------------------------------------------------------------------------
+
 
 def test_mlscorer_update_from_new_data() -> None:
     """Verifies update_from_new_data() returns correct keys and reduces multi-task loss."""
@@ -380,11 +420,13 @@ def test_mlscorer_update_from_new_data() -> None:
 
     # Verify output keys
     required_keys = {"new_losses", "ewc_penalties", "replay_losses"}
-    assert required_keys == set(result.keys()), (
-        f"Expected keys {required_keys}, got {set(result.keys())}"
-    )
+    assert required_keys == set(
+        result.keys()
+    ), f"Expected keys {required_keys}, got {set(result.keys())}"
     assert len(result["new_losses"]) == 3, "Should have 3 epoch losses"
-    assert all(np.isfinite(v) for v in result["new_losses"]), "All losses must be finite"
+    assert all(
+        np.isfinite(v) for v in result["new_losses"]
+    ), "All losses must be finite"
 
     # Platt calibration should be synced back
     assert scorer.platt_a == scorer.continual_learner.calibrator.a, "platt_a not synced"

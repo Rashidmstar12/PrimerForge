@@ -184,16 +184,16 @@ class BiophysicsEngine:
         # All values are from Table 2, column "Unified" (SantaLucia 1998).
         # ─────────────────────────────────────────────────────────────────────
         _NN_DH: Dict[str, float] = {
-            "AA": -7.9,   # AA/TT
-            "AT": -7.2,   # AT/TA
-            "TA": -7.2,   # TA/AT
-            "CA": -8.5,   # CA/GT
-            "GT": -8.4,   # GT/CA
-            "CT": -7.8,   # CT/GA
-            "GA": -8.2,   # GA/CT
+            "AA": -7.9,  # AA/TT
+            "AT": -7.2,  # AT/TA
+            "TA": -7.2,  # TA/AT
+            "CA": -8.5,  # CA/GT
+            "GT": -8.4,  # GT/CA
+            "CT": -7.8,  # CT/GA
+            "GA": -8.2,  # GA/CT
             "CG": -10.6,  # CG/GC
-            "GC": -9.8,   # GC/CG
-            "GG": -8.0,   # GG/CC
+            "GC": -9.8,  # GC/CG
+            "GG": -8.0,  # GG/CC
         }
         _NN_DS: Dict[str, float] = {
             "AA": -22.2,  # AA/TT
@@ -281,6 +281,7 @@ class BiophysicsEngine:
         na_molar = self.salt_monovalent / 1000.0  # convert mM → M
         if na_molar > 0.0 and n_pairs > 0:
             import math
+
             salt_correction = 0.114 * math.log(na_molar) * n_pairs
             dg += salt_correction
 
@@ -333,6 +334,7 @@ class BiophysicsEngine:
             return 0.0
 
         import math
+
         total_penalty = 0.0
 
         for i in range(L):
@@ -375,7 +377,7 @@ class BiophysicsEngine:
             lines = lines[1:]
         sequence_body = "".join(lines)
         seq_clean = "".join(c for c in sequence_body.upper() if c in "ATGC")
-        
+
         logger.info(
             f"Generating candidate primer pairs for target sequence of length {len(seq_clean)}..."
         )
