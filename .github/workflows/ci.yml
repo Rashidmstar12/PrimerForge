@@ -43,6 +43,8 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run tests
+        env:
+          PRIMERFORGE_NO_AUTOTRAIN: "1"
         run: poetry run pytest tests/ -v --tb=short --cov=primerforge --cov-report=xml
 
       - name: Run mypy type checker

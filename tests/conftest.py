@@ -1,6 +1,8 @@
+import os
+os.environ["PRIMERFORGE_NO_AUTOTRAIN"] = "1"
+
 import pytest
 from unittest.mock import MagicMock
-import os
 
 try:
     from primerforge.ml_scorer import MLScorer

@@ -188,7 +188,7 @@ class PredictionResult(tuple):
 class MLScorer:
     """Empirical amplification success predictor powered by a stacked GBDT-neural ensemble."""
 
-    def __init__(self, model_path: str = "models/primerforge_lightgbm.model") -> None:
+    def __init__(self, model_path: str = "models/primerforge_lightgbm.model", auto_train: bool = True) -> None:
         """Initializes the MLScorer and loads the LightGBM booster ensemble.
 
         If the model file does not exist, automatically triggers a synthetic training run.
@@ -260,10 +260,14 @@ class MLScorer:
         # Priority is loading pre-trained models
         self.load()
         if not self.models and self.model is None:
-            logger.warning(
-                f"Model file not found at {self.model_path}. Building mock empirical database..."
-            )
-            self.train_mvp_model()
+            if os.environ.get("PRIMERFORGE_NO_AUTOTRAIN") or not auto_train:
+                logger.warning("No pre-trained model found. Skipping auto-train (PRIMERFORGE_NO_AUTOTRAIN set or auto_train=False).")
+                self.models = []
+            else:
+                logger.warning(
+                    f"Model file not found at {self.model_path}. Building mock empirical database..."
+                )
+                self.train_mvp_model()
 
     def extract_features(
         self, pair: PrimerPair, spec_data: Dict[str, Any] | None = None
@@ -888,18 +892,21 @@ class MLScorer:
         )
 
         # Compute raw ensemble scores for Platt recalibration
-        try:
-            raw_scores = np.array(
-                [
-                    float(
-                        np.mean([b.predict(X_new[i : i + 1])[0] for b in self.models])
-                    )
-                    for i in range(N)
-                ],
-                dtype=np.float32,
-            )
-        except Exception:
+        if not self.models:
             raw_scores = None
+        else:
+            try:
+                raw_scores = np.array(
+                    [
+                        float(
+                            np.mean([b.predict(X_new[i : i + 1])[0] for b in self.models])
+                        )
+                        for i in range(N)
+                    ],
+                    dtype=np.float32,
+                )
+            except Exception:
+                raw_scores = None
 
         # Delegate to ContinualLearner
         result = self.continual_learner.update_from_new_data(

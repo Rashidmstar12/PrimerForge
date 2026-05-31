@@ -75,18 +75,22 @@ def test_predict_success(scorer: MLScorer, mock_pair) -> None:
 
 def test_model_serialization(tmp_path) -> None:
     """Verifies that the GBDT regressor trains, saves, and loads correctly from disk."""
+    import os
+    from unittest.mock import patch
+
     model_file = tmp_path / "serialization_test.model"
     if os.path.exists(model_file):
         os.remove(model_file)
 
     # Instantiation should trigger training and save the booster
-    scorer = MLScorer(model_path=str(model_file))
-    assert os.path.exists(model_file)
-    assert scorer.model is not None
+    with patch.dict(os.environ, {"PRIMERFORGE_NO_AUTOTRAIN": ""}):
+        scorer = MLScorer(model_path=str(model_file))
+        assert os.path.exists(model_file)
+        assert scorer.model is not None
 
-    # Load from disk and verify
-    new_scorer = MLScorer(model_path=str(model_file))
-    assert new_scorer.model is not None
+        # Load from disk and verify
+        new_scorer = MLScorer(model_path=str(model_file))
+        assert new_scorer.model is not None
 
 
 def test_train_full_model(tmp_path) -> None:

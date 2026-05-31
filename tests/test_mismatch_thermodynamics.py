@@ -80,9 +80,17 @@ def test_mismatch_hierarchy(biophysics) -> None:
     assert penalty_heavy > penalty_wobble
 
 
-def test_ml_scorer_variant_prediction() -> None:
+def test_ml_scorer_variant_prediction(tmp_path) -> None:
     """Verifies that MLScorer properly discounts success probability when a template carries a mismatch."""
-    scorer = MLScorer()
+    import shutil
+    import os
+
+    real_model = "models/primerforge_lightgbm.model"
+    temp_model = tmp_path / "primerforge_lightgbm_mock.model"
+    if os.path.exists(real_model):
+        shutil.copy(real_model, temp_model)
+
+    scorer = MLScorer(model_path=str(temp_model))
 
     f_seq = "CACCATTGGCAATGAGCGGT"
     r_seq = "CGCTCAGGAGGAGCAATGAT"
