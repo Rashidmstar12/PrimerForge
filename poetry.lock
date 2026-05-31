@@ -2843,4 +2843,4 @@ mappy = ["mappy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "ebdb6a30bf4d01514b89e04d8a1df1d4dbd559388573df92a5d60f64831ba4b0"
+content-hash = "3b8531cf41ae06e96c91e109d8d08b31555a941cdba5a662996fcfdcfcb2d445"
