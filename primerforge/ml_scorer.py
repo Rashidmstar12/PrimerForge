@@ -247,6 +247,13 @@ class MLScorer:
         # Resolve absolute paths and create model directories
         os.makedirs(os.path.dirname(os.path.abspath(self.model_path)), exist_ok=True)
 
+        self._provenance = {
+            "source": "synthetic_fallback",
+            "n_samples": 0,
+            "databases": [],
+            "real_pct": 0.0
+        }
+
         # Priority is loading pre-trained models
         self.load()
         if not self.models and self.model is None:
@@ -1338,122 +1345,312 @@ class MLScorer:
         )
 
     def train_mvp_model(self) -> None:
-        """Generates ~2,000 highly realistic synthetic primer pairs to train the LightGBM MVP model."""
-        logger.info("Generating synthetic empirical database (N=2000)...")
+        """FIRST tries to load and train on real PrimerBank and empirical databases,
+        falling back to synthetic generation if < 50 valid rows are available.
+        """
+        logger.info("Initializing MVP model training pipeline...")
 
-        np.random.seed(42)
-        n_samples = 2000
+        # Try loading real data
+        real_loaded = False
         x_data = []
         y_data = []
+        databases_used = []
 
-        for _ in range(n_samples):
-            f_tm = np.random.normal(60.0, 1.5)
-            r_tm = np.random.normal(60.0, 1.5)
-            tm_diff = abs(f_tm - r_tm)
-            f_hairpin = -np.random.exponential(1.5)
-            r_hairpin = -np.random.exponential(1.5)
-            f_homodimer = -np.random.exponential(2.0)
-            r_homodimer = -np.random.exponential(2.0)
-            cross_dimer = -np.random.exponential(2.5)
+        p1 = "data/primerbank_real.csv"
+        p2 = "data/live_ultra_empirical_db.csv"
 
-            f_gc = np.random.normal(50.0, 5.0)
-            r_gc = np.random.normal(50.0, 5.0)
-            f_len = float(np.random.randint(18, 24))
-            r_len = float(np.random.randint(18, 24))
+        from primerforge.biophysics import PrimerSequence, PrimerPair
+        engine = _get_biophysics_engine()
 
-            f_clamp_gc = float(np.random.randint(0, 5))
-            r_clamp_gc = float(np.random.randint(0, 5))
-            f_poly_run = float(np.random.randint(1, 4))
-            r_poly_run = float(np.random.randint(1, 4))
+        # Step 1: Load and parse primerbank_real.csv
+        rows_p1 = []
+        if os.path.exists(p1):
+            try:
+                df1 = pd.read_csv(p1)
+                logger.info(f"Loaded {len(df1)} rows from {p1}")
+                for _, row in df1.iterrows():
+                    f_seq = row.get("forward_seq")
+                    r_seq = row.get("reverse_seq")
+                    if pd.notna(f_seq) and pd.notna(r_seq):
+                        f_seq = str(f_seq).strip()
+                        r_seq = str(r_seq).strip()
+                        if f_seq and r_seq:
+                            success_val = 1.0
+                            if "success" in row and pd.notna(row["success"]):
+                                success_val = float(row["success"])
+                            elif "success_idx" in row and pd.notna(row["success_idx"]):
+                                success_val = float(row["success_idx"])
+                            elif "efficiency" in row and pd.notna(row["efficiency"]):
+                                eff = float(row["efficiency"])
+                                success_val = 1.0 if eff > 0.7 else 0.0
+                            elif "specificity" in row and pd.notna(row["specificity"]):
+                                spec = str(row["specificity"]).lower()
+                                success_val = 1.0 if "single_peak" in spec else 0.0
 
-            f_3_dinuc_gc = float(np.random.choice([0.0, 1.0]))
-            r_3_dinuc_gc = float(np.random.choice([0.0, 1.0]))
-            f_3_dinuc_aa = float(np.random.choice([0.0, 1.0]))
-            f_3_dinuc_tt = float(np.random.choice([0.0, 1.0]))
-            r_3_dinuc_aa = float(np.random.choice([0.0, 1.0]))
-            r_3_dinuc_tt = float(np.random.choice([0.0, 1.0]))
+                            rows_p1.append({
+                                "f_seq": f_seq,
+                                "r_seq": r_seq,
+                                "success": success_val,
+                                "source": "primerbank",
+                                "row": row.to_dict()
+                            })
+                if len(rows_p1) > 0:
+                    databases_used.append("PrimerBank")
+            except Exception as e:
+                logger.warning(f"Failed to read/parse {p1}: {e}")
 
-            f_3_stability = np.random.normal(1.5, 0.5)
-            r_3_stability = np.random.normal(1.5, 0.5)
+        # Step 2: Load and parse live_ultra_empirical_db.csv
+        rows_p2 = []
+        if os.path.exists(p2):
+            try:
+                df2 = pd.read_csv(p2)
+                logger.info(f"Loaded {len(df2)} rows from {p2}")
+                for _, row in df2.iterrows():
+                    f_seq = row.get("forward_seq")
+                    r_seq = row.get("reverse_seq")
+                    if pd.notna(f_seq) and pd.notna(r_seq):
+                        f_seq = str(f_seq).strip()
+                        r_seq = str(r_seq).strip()
+                        if f_seq and r_seq:
+                            success_val = 1.0
+                            if "success" in row and pd.notna(row["success"]):
+                                success_val = float(row["success"])
+                            elif "success_idx" in row and pd.notna(row["success_idx"]):
+                                success_val = float(row["success_idx"])
+                            elif "efficiency" in row and pd.notna(row["efficiency"]):
+                                eff = float(row["efficiency"])
+                                success_val = 1.0 if eff > 0.7 else 0.0
+                            elif "specificity" in row and pd.notna(row["specificity"]):
+                                spec = str(row["specificity"]).lower()
+                                success_val = 1.0 if "single_peak" in spec else 0.0
 
-            target_mfe = -np.random.exponential(8.0)
-            target_gc = np.random.normal(45.0, 8.0)
-            target_len = float(np.random.randint(80, 200))
-            primer_overlap = 0.0
+                            rows_p2.append({
+                                "f_seq": f_seq,
+                                "r_seq": r_seq,
+                                "success": success_val,
+                                "source": "live_ultra_empirical",
+                                "row": row.to_dict()
+                            })
+                if len(rows_p2) > 0:
+                    databases_used.append("live_ultra_empirical")
+            except Exception as e:
+                logger.warning(f"Failed to read/parse {p2}: {e}")
 
-            f_off_targets = float(
-                np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01])
-            )
-            r_off_targets = float(
-                np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01])
-            )
-            f_var_dist = float(
-                np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90])
-            )
-            r_var_dist = float(
-                np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90])
-            )
+        all_real_rows = rows_p1 + rows_p2
 
-            salt_mono = 50.0
-            salt_div = 1.5
-            dntp_conc = 0.2
-            poly_encoded = 0.0
+        if len(all_real_rows) >= 50:
+            logger.info(f"Extracting biophysical features for {len(all_real_rows)} real primer pairs...")
 
-            vec = [
-                f_tm,
-                r_tm,
-                tm_diff,
-                f_hairpin,
-                r_hairpin,
-                f_homodimer,
-                r_homodimer,
-                cross_dimer,
-                f_gc,
-                r_gc,
-                f_len,
-                r_len,
-                f_clamp_gc,
-                r_clamp_gc,
-                f_poly_run,
-                r_poly_run,
-                f_3_dinuc_gc,
-                r_3_dinuc_gc,
-                f_3_dinuc_aa,
-                f_3_dinuc_tt,
-                r_3_dinuc_aa,
-                r_3_dinuc_tt,
-                f_3_stability,
-                r_3_stability,
-                target_mfe,
-                target_gc,
-                target_len,
-                primer_overlap,
-                f_off_targets,
-                r_off_targets,
-                f_var_dist,
-                r_var_dist,
-                salt_mono,
-                salt_div,
-                dntp_conc,
-                poly_encoded,
-            ]
-            # Add dummy GNN and transformer features for MVP dataset backward compatibility
-            vec.extend([0.0, 0.0, 0.5, 0.5])
-            x_data.append(vec)
+            for item in all_real_rows:
+                f_seq = item["f_seq"]
+                r_seq = item["r_seq"]
+                row_dict = item["row"]
 
-            success = 0.98
-            success -= 0.05 * tm_diff
-            success -= 0.08 * abs(f_hairpin) if f_hairpin < -4.0 else 0.0
-            success -= 0.08 * abs(r_hairpin) if r_hairpin < -4.0 else 0.0
-            success -= 0.06 * abs(cross_dimer) if cross_dimer < -5.0 else 0.0
-            success -= 0.20 * f_off_targets
-            success -= 0.20 * r_off_targets
-            if f_var_dist <= 5.0 or r_var_dist <= 5.0:
-                success -= 0.60
+                f_tm = row_dict.get("f_tm")
+                r_tm = row_dict.get("r_tm")
+                f_hairpin = row_dict.get("f_hairpin_dg")
+                r_hairpin = row_dict.get("r_hairpin_dg")
+                f_homodimer = row_dict.get("f_homodimer_dg")
+                r_homodimer = row_dict.get("r_homodimer_dg")
+                cross_dimer = row_dict.get("cross_dimer_dg")
+                f_gc = row_dict.get("f_gc")
+                r_gc = row_dict.get("r_gc")
+                f_len = row_dict.get("f_len")
+                r_len = row_dict.get("r_len")
 
-            success = max(0.01, min(0.99, success))
-            success += np.random.normal(0.0, 0.02)
-            y_data.append(max(0.01, min(0.99, success)))
+                if f_tm is None or f_hairpin is None or f_homodimer is None:
+                    f_thermo = engine.calculate_thermo_features(f_seq)
+                    f_tm = f_thermo["tm"]
+                    f_hairpin = f_thermo["hairpin_dg"]
+                    f_homodimer = f_thermo["homodimer_dg"]
+                if r_tm is None or r_hairpin is None or r_homodimer is None:
+                    r_thermo = engine.calculate_thermo_features(r_seq)
+                    r_tm = r_thermo["tm"]
+                    r_hairpin = r_thermo["hairpin_dg"]
+                    r_homodimer = r_thermo["homodimer_dg"]
+                if cross_dimer is None:
+                    cross_dimer = engine.calculate_heterodimer_dg(f_seq, r_seq)
+
+                f_gc_val = f_gc if f_gc is not None else (sum(1 for b in f_seq.upper() if b in "GC") / len(f_seq) * 100.0)
+                r_gc_val = r_gc if r_gc is not None else (sum(1 for b in r_seq.upper() if b in "GC") / len(r_seq) * 100.0)
+                f_len_val = f_len if f_len is not None else float(len(f_seq))
+                r_len_val = r_len if r_len is not None else float(len(r_seq))
+
+                f_primer = PrimerSequence(
+                    sequence=f_seq,
+                    start=0,
+                    length=int(f_len_val),
+                    tm=float(f_tm),
+                    gc_percent=float(f_gc_val),
+                    hairpin_dg=float(f_hairpin),
+                    homodimer_dg=float(f_homodimer),
+                    penalty=0.0
+                )
+
+                r_primer = PrimerSequence(
+                    sequence=r_seq,
+                    start=0,
+                    length=int(r_len_val),
+                    tm=float(r_tm),
+                    gc_percent=float(r_gc_val),
+                    hairpin_dg=float(r_hairpin),
+                    homodimer_dg=float(r_homodimer),
+                    penalty=0.0
+                )
+
+                pair = PrimerPair(
+                    forward=f_primer,
+                    reverse=r_primer,
+                    product_size=int(row_dict.get("target_len", 120)),
+                    cross_dimer_dg=float(cross_dimer),
+                    penalty=0.0
+                )
+
+                spec_data = {
+                    "polymerase": row_dict.get("polymerase", "Standard_Taq"),
+                    "salt_monovalent_mm": float(row_dict.get("salt_monovalent_mm", 50.0)),
+                    "salt_divalent_mm": float(row_dict.get("salt_divalent_mm", 1.5)),
+                    "dntp_conc_mm": float(row_dict.get("dntp_conc_mm", 0.2)),
+                    "f_off_targets": float(row_dict.get("f_off_targets", 0.0)),
+                    "r_off_targets": float(row_dict.get("r_off_targets", 0.0)),
+                    "f_var_dist": float(row_dict.get("f_var_dist", 20.0)),
+                    "r_var_dist": float(row_dict.get("r_var_dist", 20.0)),
+                }
+
+                vec = self.extract_features(pair, spec_data)
+                x_data.append(vec)
+                y_data.append(item["success"])
+
+            real_loaded = True
+            logger.info(f"Training on {len(all_real_rows)} real empirical primer pairs from PrimerBank/empirical DB")
+
+            self._provenance = {
+                "source": "real_empirical",
+                "n_samples": len(all_real_rows),
+                "databases": databases_used,
+                "real_pct": 100.0
+            }
+
+        else:
+            logger.info("Generating synthetic empirical database (N=2000)...")
+
+            np.random.seed(42)
+            n_samples = 2000
+
+            for _ in range(n_samples):
+                f_tm = np.random.normal(60.0, 1.5)
+                r_tm = np.random.normal(60.0, 1.5)
+                tm_diff = abs(f_tm - r_tm)
+                f_hairpin = -np.random.exponential(1.5)
+                r_hairpin = -np.random.exponential(1.5)
+                f_homodimer = -np.random.exponential(2.0)
+                r_homodimer = -np.random.exponential(2.0)
+                cross_dimer = -np.random.exponential(2.5)
+
+                f_gc = np.random.normal(50.0, 5.0)
+                r_gc = np.random.normal(50.0, 5.0)
+                f_len = float(np.random.randint(18, 24))
+                r_len = float(np.random.randint(18, 24))
+
+                f_clamp_gc = float(np.random.randint(0, 5))
+                r_clamp_gc = float(np.random.randint(0, 5))
+                f_poly_run = float(np.random.randint(1, 4))
+                r_poly_run = float(np.random.randint(1, 4))
+
+                f_3_dinuc_gc = float(np.random.choice([0.0, 1.0]))
+                r_3_dinuc_gc = float(np.random.choice([0.0, 1.0]))
+                f_3_dinuc_aa = float(np.random.choice([0.0, 1.0]))
+                f_3_dinuc_tt = float(np.random.choice([0.0, 1.0]))
+                r_3_dinuc_aa = float(np.random.choice([0.0, 1.0]))
+                r_3_dinuc_tt = float(np.random.choice([0.0, 1.0]))
+
+                f_3_stability = np.random.normal(1.5, 0.5)
+                r_3_stability = np.random.normal(1.5, 0.5)
+
+                target_mfe = -np.random.exponential(8.0)
+                target_gc = np.random.normal(45.0, 8.0)
+                target_len = float(np.random.randint(80, 200))
+                primer_overlap = 0.0
+
+                f_off_targets = float(
+                    np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01])
+                )
+                r_off_targets = float(
+                    np.random.choice([0, 1, 2, 5], p=[0.85, 0.10, 0.04, 0.01])
+                )
+                f_var_dist = float(
+                    np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90])
+                )
+                r_var_dist = float(
+                    np.random.choice([1, 3, 5, 20], p=[0.02, 0.03, 0.05, 0.90])
+                )
+
+                salt_mono = 50.0
+                salt_div = 1.5
+                dntp_conc = 0.2
+                poly_encoded = 0.0
+
+                vec = [
+                    f_tm,
+                    r_tm,
+                    tm_diff,
+                    f_hairpin,
+                    r_hairpin,
+                    f_homodimer,
+                    r_homodimer,
+                    cross_dimer,
+                    f_gc,
+                    r_gc,
+                    f_len,
+                    r_len,
+                    f_clamp_gc,
+                    r_clamp_gc,
+                    f_poly_run,
+                    r_poly_run,
+                    f_3_dinuc_gc,
+                    r_3_dinuc_gc,
+                    f_3_dinuc_aa,
+                    f_3_dinuc_tt,
+                    r_3_dinuc_aa,
+                    r_3_dinuc_tt,
+                    f_3_stability,
+                    r_3_stability,
+                    target_mfe,
+                    target_gc,
+                    target_len,
+                    primer_overlap,
+                    f_off_targets,
+                    r_off_targets,
+                    f_var_dist,
+                    r_var_dist,
+                    salt_mono,
+                    salt_div,
+                    dntp_conc,
+                    poly_encoded,
+                ]
+                vec.extend([0.0, 0.0, 0.5, 0.5])
+                x_data.append(vec)
+
+                success = 0.98
+                success -= 0.05 * tm_diff
+                success -= 0.08 * abs(f_hairpin) if f_hairpin < -4.0 else 0.0
+                success -= 0.08 * abs(r_hairpin) if r_hairpin < -4.0 else 0.0
+                success -= 0.06 * abs(cross_dimer) if cross_dimer < -5.0 else 0.0
+                success -= 0.20 * f_off_targets
+                success -= 0.20 * r_off_targets
+                if f_var_dist <= 5.0 or r_var_dist <= 5.0:
+                    success -= 0.60
+
+                success = max(0.01, min(0.99, success))
+                success += np.random.normal(0.0, 0.02)
+                y_data.append(max(0.01, min(0.99, success)))
+
+            self._provenance = {
+                "source": "synthetic_fallback",
+                "n_samples": n_samples,
+                "databases": ["synthetic"],
+                "real_pct": 0.0
+            }
 
         x_arr = np.array(x_data, dtype=np.float32)
         y_arr = np.array(y_data, dtype=np.float32)
@@ -1477,15 +1674,13 @@ class MLScorer:
 
         self.models = [self.model]
 
-        # Bootstrap-train the MultiTask Amplification Head on the same synthetic dataset
         logger.info(
             "Bootstrap-training MultiTaskAmpHead on synthetic amplification targets..."
         )
         X_mt, Y_ct, Y_yield, Y_melt = generate_synthetic_amp_targets(
             n=len(x_data), seed=42
         )
-        # Use the existing synthetic feature matrix (already 38-dim) for alignment
-        X_mt_aligned = x_arr  # x_arr is already (N, 38) with GNN dummy features
+        X_mt_aligned = x_arr
         self.multitask_head.train(
             X_mt_aligned, Y_ct, Y_yield, Y_melt, epochs=20, lr=5e-4, batch_size=64
         )
@@ -1493,6 +1688,15 @@ class MLScorer:
 
         self.save()
         logger.info(f"LightGBM MVP model trained and serialized to: {self.model_path}")
+
+    def get_training_data_provenance(self) -> Dict[str, Any]:
+        """Returns metadata about the training data source and composition."""
+        return getattr(self, "_provenance", {
+            "source": "synthetic_fallback",
+            "n_samples": 0,
+            "databases": [],
+            "real_pct": 0.0
+        })
 
     def train_hybrid_model(
         self, target_size: int = 10000, n_samples: int = 10000
