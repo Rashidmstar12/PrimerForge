@@ -270,6 +270,124 @@ def render_dimerization_heatmap(matrix, labels, title="Symmetric Cross-Reactivit
     return ""
 
 
+def render_interactive_dimer_network(matrix, labels, threshold=-4.0):
+    import json
+    import streamlit.components.v1 as components
+    if len(labels) == 0:
+        return
+    
+    nodes = []
+    edges = []
+    
+    for idx, label in enumerate(labels):
+        is_rev = label.endswith("_R") or "_R" in label
+        color = {
+            "background": "#c084fc" if is_rev else "#38bdf8",
+            "border": "#a855f7" if is_rev else "#0ea5e9",
+            "highlight": {
+                "background": "#d8b4fe" if is_rev else "#7dd3fc",
+                "border": "#c084fc" if is_rev else "#38bdf8"
+            }
+        }
+        nodes.append({
+            "id": idx,
+            "label": label,
+            "color": color,
+            "font": {"color": "#f1f5f9", "size": 12, "face": "Inter, sans-serif"},
+            "shape": "dot",
+            "size": 15
+        })
+        
+    num_nodes = len(labels)
+    for i in range(num_nodes):
+        for j in range(i + 1, num_nodes):
+            dg = float(matrix[i][j])
+            if dg <= threshold:
+                weight = max(1.0, abs(dg) - 3.0)
+                if dg <= -7.0:
+                    edge_color = "#ef4444"
+                elif dg <= -5.0:
+                    edge_color = "#f97316"
+                else:
+                    edge_color = "#eab308"
+                    
+                edges.append({
+                    "from": i,
+                    "to": j,
+                    "width": weight,
+                    "color": edge_color,
+                    "title": f"ΔG: {dg:.2f} kcal/mol"
+                })
+                
+    html_str = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+        <style type="text/css">
+            #mynetwork {{
+                width: 100%;
+                height: 460px;
+                background-color: #0f172a;
+                border: 1px solid #334155;
+                border-radius: 12px;
+            }}
+            body {{
+                margin: 0;
+                padding: 0;
+                background-color: #0f172a;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="mynetwork"></div>
+        <script type="text/javascript">
+            var nodes = new vis.DataSet({json.dumps(nodes)});
+            var edges = new vis.DataSet({json.dumps(edges)});
+            var container = document.getElementById('mynetwork');
+            var data = {{
+                nodes: nodes,
+                edges: edges
+            }};
+            var options = {{
+                physics: {{
+                    stabilization: true,
+                    barnesHut: {{
+                        gravitationalConstant: -2000,
+                        centralGravity: 0.3,
+                        springLength: 95,
+                        springConstant: 0.04,
+                        damping: 0.09
+                    }}
+                }},
+                interaction: {{
+                    hover: true,
+                    zoomView: true
+                }},
+                nodes: {{
+                    borderWidth: 2,
+                    shadow: true
+                }},
+                edges: {{
+                    shadow: true,
+                    smooth: {{
+                        type: 'continuous'
+                    }}
+                }}
+            }};
+            var network = new vis.Network(container, data, options);
+        </script>
+    </body>
+    </html>
+    """
+    
+    st.markdown("### 🕸️ Interactive Dimerization Network Graph")
+    st.markdown("Drag nodes to arrange them. Hover over edges to inspect the exact dimerization free energies ($\\Delta G$).")
+    components.html(html_str, height=480)
+
+
+
 def generate_html_report(
     selected_index: int,
     pair: Any,
@@ -2277,6 +2395,7 @@ with tab2:
                         matrix = panel.dimerization_matrix
                         labels = panel.primer_labels
                         matrix_base64 = render_dimerization_heatmap(matrix, labels, "🔬 Symmetric Cross-Reactivity Dimerization Matrix (Greedy)")
+                        render_interactive_dimer_network(matrix, labels, threshold=dg_thresh)
 
                         # ──────────────────────────────────────────────────────────
                         # Programmatic Biophysical Conclusion (PSII Methodological Framework) - Greedy
@@ -2426,6 +2545,7 @@ with tab2:
                             dimer_opt = DimerMultiplexOptimizer(biophys)
                             matrix, labels = dimer_opt.build_dimerization_matrix(pairs_list)
                             matrix_base64 = render_dimerization_heatmap(matrix, labels, "🔬 Symmetric Cross-Reactivity Dimerization Matrix (ILP)")
+                            render_interactive_dimer_network(matrix, labels, threshold=dg_thresh)
 
                         # ──────────────────────────────────────────────────────────
                         # Programmatic Biophysical Conclusion (PSII Methodological Framework) - ILP
@@ -2605,7 +2725,79 @@ with tab3:
                 ax.set_ylabel("ML Success")
                 ax.set_title("Coverage Map – Predicted Success per Tile")
                 ax.set_ylim(0, 1)
-                st.pyplot(fig)
+                
+                # Plotly CDN-based Interactive Coverage Map
+                import json
+                import streamlit.components.v1 as components
+                
+                plotly_data = [{
+                    "x": xs,
+                    "y": [float(y) for y in ys],
+                    "type": "bar",
+                    "marker": {
+                        "color": "#38bdf8",
+                        "opacity": 0.8
+                    },
+                    "hovertemplate": "Position: %{x} bp<br>ML Success: %{y:.1%}<extra></extra>"
+                }]
+                plotly_layout = {
+                    "title": {
+                        "text": "📊 Interactive Coverage Map – Predicted Success per Tile",
+                        "font": { "color": "#7dd3fc", "size": 16, "family": "Inter, sans-serif" }
+                    },
+                    "paper_bgcolor": "#0f172a",
+                    "plot_bgcolor": "#0f172a",
+                    "xaxis": {
+                        "title": "Genome position (bp)",
+                        "titlefont": { "color": "#f1f5f9", "size": 12, "family": "Inter, sans-serif" },
+                        "tickfont": { "color": "#94a3b8", "size": 10 },
+                        "gridcolor": "#334155"
+                    },
+                    "yaxis": {
+                        "title": "ML Success",
+                        "titlefont": { "color": "#f1f5f9", "size": 12, "family": "Inter, sans-serif" },
+                        "tickfont": { "color": "#94a3b8", "size": 10 },
+                        "gridcolor": "#334155",
+                        "range": [0, 1]
+                    },
+                    "margin": { "t": 40, "b": 40, "l": 50, "r": 20 },
+                    "height": 280
+                }
+                
+                plotly_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+                    <style>
+                        #plotly-chart {{
+                            width: 100%;
+                            height: 280px;
+                            background-color: #0f172a;
+                            border: 1px solid #334155;
+                            border-radius: 12px;
+                        }}
+                        body {{
+                            margin: 0;
+                            padding: 0;
+                            background-color: #0f172a;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div id="plotly-chart"></div>
+                    <script>
+                        var data = {json.dumps(plotly_data)};
+                        var layout = {json.dumps(plotly_layout)};
+                        Plotly.newPlot('plotly-chart', data, layout, {{responsive: true, displayModeBar: false}});
+                    </script>
+                </body>
+                </html>
+                """
+                st.markdown("### 📈 Interactive Coverage Map")
+                st.markdown("Hover over bars to see the exact coordinate and ML success probability of each amplicon tile.")
+                components.html(plotly_html, height=300)
                 
                 # Base64 encode for offline HTML report embedding
                 import io
