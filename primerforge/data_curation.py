@@ -1171,8 +1171,6 @@ class GelVisionAnalyzerStub:
                 "gel_outcome": "Multi_Peak",
             }
 
-        return df
-
 
 class MeltCurveAnalyzerStub:
     """Mock parser analyzing raw dissociation melt curves to identify peak profiles."""
