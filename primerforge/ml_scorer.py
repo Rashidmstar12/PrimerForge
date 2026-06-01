@@ -769,13 +769,12 @@ class MLScorer:
             )
             total_mismatch_penalty = f_mismatch_penalty + r_mismatch_penalty
 
-            # Adjust ensembled raw score based on thermodynamic destabilization
-            adjusted_raw = mean_raw - total_mismatch_penalty
+            # Apply Platt Calibration Sigmoid to base score
+            p_base = 1.0 / (1.0 + np.exp(self.platt_a * mean_raw + self.platt_b))
 
-            # Apply Platt Calibration Sigmoid
-            calibrated = 1.0 / (
-                1.0 + np.exp(self.platt_a * adjusted_raw + self.platt_b)
-            )
+            # Apply exponential thermodynamic mismatch discount on probability scale
+            # A 3' terminal mismatch (penalty >= 1.0) reduces probability by ~78% (e^-1.5)
+            calibrated = p_base * np.exp(-1.5 * total_mismatch_penalty)
             return max(0.01, min(0.99, calibrated))
 
         except Exception as e:
