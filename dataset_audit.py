@@ -371,11 +371,12 @@ def main():
     report_md.append("| Parameter | Category | Count | Percentage |")
     report_md.append("| :--- | :--- | :---: | :---: |")
     report_md.append(f"| **Total Primer Pairs** | All | {total_pairs:,} | 100.00% |")
-    report_md.append("| **Source DB** | rtprimerdb | {} | {:.2f}% |".format(source_counts.get('rtprimerdb', 0), source_counts.get('rtprimerdb', 0) / total_pairs * 100.0))
-    report_md.append("| | artic | {} | {:.2f}% |".format(source_counts.get('artic', 0), source_counts.get('artic', 0) / total_pairs * 100.0))
-    report_md.append("| | primerbank | {} | {:.2f}% |".format(source_counts.get('primerbank', 0), source_counts.get('primerbank', 0) / total_pairs * 100.0))
-    report_md.append("| | pmc | {} | {:.2f}% |".format(source_counts.get('pmc', 0), source_counts.get('pmc', 0) / total_pairs * 100.0))
-    report_md.append("| | synthetic | {} | {:.2f}% |".format(source_counts.get('synthetic', 0), source_counts.get('synthetic', 0) / total_pairs * 100.0))
+    first = True
+    for src, count in source_counts.items():
+        pct = count / total_pairs * 100.0
+        label_col = "**Source DB**" if first else ""
+        report_md.append(f"| {label_col} | {src} | {count} | {pct:.2f}% |")
+        first = False
     report_md.append(f"| **Label** | label=1 (Functional) | {label_1_count} | {label_1_pct:.2f}% |")
     report_md.append(f"| | label=0 (Non-Functional) | {label_0_count} | {label_0_pct:.2f}% |")
     report_md.append("| **Confidence** | High | {} | {:.2f}% |".format(confidences.get('high', 0), confidences.get('high', 0) / total_pairs * 100.0))
