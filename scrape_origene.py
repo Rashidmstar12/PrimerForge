@@ -2,9 +2,8 @@
 """
 scrape_origene.py
 
-Dynamically extracts all human and mouse qPCR primer product page URLs from the
-OriGene landing page, scrapes their sequences and metadata, and integrates them
-into the unified training database.
+Scrapes a larger batch (500) of validated qPCR primer pairs from OriGene's sitemap,
+integrates them into the master training database, and triggers biophysical auditing.
 """
 
 import os
@@ -15,13 +14,15 @@ import datetime
 import requests
 import pandas as pd
 import numpy as np
+import concurrent.futures
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List
 
-LANDING_URL = "https://www.origene.com/catalog/gene-expression/qpcr-primer-pairs"
+SITEMAP_URL = "https://www.origene.com/media/sitemap/sitemap-1-55.xml"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
+TARGET_COUNT = 500
 
 MASTER_COLUMNS = [
     'primer_id', 'gene_name', 'organism', 'source_db', 'paper_doi',
@@ -35,42 +36,30 @@ MASTER_COLUMNS = [
 ]
 FINAL_COLUMNS = MASTER_COLUMNS + ['near_duplicate_flag', 'near_duplicate_partner_id']
 
-def get_product_urls() -> List[str]:
-    """Fetches the landing page and extracts unique qPCR product page URLs."""
-    print(f"Fetching main catalog landing page from: {LANDING_URL}...", flush=True)
+def get_sitemap_urls(target_count: int) -> List[str]:
+    """Fetches the sitemap and extracts up to target_count qPCR product URLs."""
+    print(f"Fetching sitemap from: {SITEMAP_URL}...", flush=True)
     try:
-        response = requests.get(LANDING_URL, headers=HEADERS, timeout=15)
+        response = requests.get(SITEMAP_URL, headers=HEADERS, timeout=15)
         if response.status_code != 200:
-            print(f"Error: Received status code {response.status_code} for landing page.", file=sys.stderr)
+            print(f"Error: Received status code {response.status_code} for sitemap.", file=sys.stderr)
             return []
             
-        soup = BeautifulSoup(response.text, "html.parser")
-        product_urls = set()
+        # Parse XML locations using fast regex matching
+        urls = re.findall(r'<loc>(https://www.origene.com/catalog/gene-expression/qpcr-primer-pairs/[^<]+)</loc>', response.text)
         
-        for a in soup.find_all("a", href=True):
-            href = a["href"].split("#")[0].split("?")[0].strip()
-            
-            # Find URLs that match catalog path for primer pairs
-            if "/qpcr-primer-pairs/" in href:
-                parts = href.split("/")
-                last_part = parts[-1]
-                # Look for human (hp...) or mouse (mp...) SKUs
-                if last_part.startswith("hp") or last_part.startswith("mp"):
-                    # Convert relative path to absolute
-                    if href.startswith("/"):
-                        href = "https://www.origene.com" + href
-                    product_urls.add(href)
-                    
-        urls_list = sorted(list(product_urls))
-        print(f"Extracted {len(urls_list)} unique qPCR primer product page URLs.")
-        return urls_list
+        # Exclude generic landing page if matched
+        urls = [url for url in urls if not url.endswith("qpcr-primer-pairs")]
+        
+        selected_urls = urls[:target_count]
+        print(f"Total qPCR primer URLs found in sitemap: {len(urls)}. Selected first {len(selected_urls)} for ingestion.")
+        return selected_urls
     except Exception as e:
-        print(f"Exception occurred while parsing landing page links: {e}", file=sys.stderr)
+        print(f"Exception occurred while parsing sitemap: {e}", file=sys.stderr)
         return []
 
 def scrape_product_page(url: str) -> Dict[str, Any]:
     """Scrapes sequences and metadata from a specific OriGene product page."""
-    # Extract SKU from the URL
     parts = url.split("/")
     last_part = parts[-1]
     sku_match = re.match(r"^([hm]p[0-9]+)", last_part, re.IGNORECASE)
@@ -79,16 +68,15 @@ def scrape_product_page(url: str) -> Dict[str, Any]:
         return None
     sku = sku_match.group(1).upper()
     
-    print(f"Scraping product page for SKU '{sku}' (URL: {url})...", flush=True)
+    # Introduce a small polite delay per worker
+    time.sleep(0.8)
     
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code != 200:
-            print(f"  Error: Received status code {response.status_code} for URL: {url}", file=sys.stderr)
             return None
             
         if "primer-primer" in response.url:
-            print(f"  Error: URL redirected to fallback page.", file=sys.stderr)
             return None
             
         soup = BeautifulSoup(response.text, "html.parser")
@@ -106,7 +94,6 @@ def scrape_product_page(url: str) -> Dict[str, Any]:
         locus_id = attrs.get("locus id", "N/A")
         
         if not fwd_seq or not rev_seq:
-            print(f"  Error: Forward/Reverse sequences not found in table for {sku}", file=sys.stderr)
             return None
             
         fwd_seq = str(fwd_seq).upper().strip()
@@ -119,7 +106,6 @@ def scrape_product_page(url: str) -> Dict[str, Any]:
         h1 = soup.find("h1")
         if h1:
             h1_text = h1.text.strip()
-            # Parse gene symbol
             match = re.match(r"^([A-Za-z0-9_\-\(\)]+)\s+([A-Za-z]+)\s+qPCR\s+Primer\s+Pair", h1_text, re.IGNORECASE)
             if match:
                 gene_name = match.group(1).upper()
@@ -140,11 +126,8 @@ def scrape_product_page(url: str) -> Dict[str, Any]:
             elif "mus musculus" in desc_val:
                 organism = "mouse"
                 
-        # Normalize organism names matching database conventions
         if organism == "mouse":
             organism = "mus musculus"
-        elif organism == "human":
-            organism = "human"
             
         record = {
             'primer_id': f"origene_{sku}_{gene_name}",
@@ -171,34 +154,42 @@ def scrape_product_page(url: str) -> Dict[str, Any]:
             'near_duplicate_flag': False,
             'near_duplicate_partner_id': ""
         }
-        
-        print(f"  Parsed successfully: Gene={gene_name}, Species={organism}, Fwd={fwd_seq}, Rev={rev_seq}")
         return record
     except Exception as e:
-        print(f"  Error: Exception parsing {sku}: {e}", file=sys.stderr)
+        print(f"  Error parsing {sku}: {e}", file=sys.stderr)
         return None
 
 def main():
     print("="*60)
-    print("STARTING BULK ORIGENE CRAWLER & SCRAPER")
+    print(f"STARTING BULK ORIGENE CRAWLER (TARGET: {TARGET_COUNT} PRIMER PAIRS)")
     print("="*60)
     
     # 1. Fetch URLs
-    urls = get_product_urls()
+    urls = get_sitemap_urls(TARGET_COUNT)
     if not urls:
-        print("Error: No URLs extracted from landing page.", file=sys.stderr)
+        print("Error: No URLs extracted from sitemap.", file=sys.stderr)
         sys.exit(1)
         
-    # 2. Crawl and parse each product URL
+    # 2. Crawl and parse product URLs concurrently (using 3 threads to be fast yet polite)
     scraped_records = []
-    for idx, url in enumerate(urls):
-        record = scrape_product_page(url)
-        if record:
-            scraped_records.append(record)
-        # Sleep to be polite to the server and avoid rate limits
-        time.sleep(1.0)
-        
-    print(f"\nCompleted crawling. Scraped {len(scraped_records)} of {len(urls)} successfully.")
+    success_count = 0
+    
+    print("\nCrawling product pages concurrently with 3 workers...", flush=True)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_url = {executor.submit(scrape_product_page, url): url for url in urls}
+        for idx, future in enumerate(concurrent.futures.as_completed(future_to_url)):
+            url = future_to_url[future]
+            try:
+                record = future.result()
+                if record:
+                    scraped_records.append(record)
+                    success_count += 1
+            except Exception as e:
+                pass
+            if (idx + 1) % 50 == 0 or idx + 1 == len(urls):
+                print(f"  Processed {idx + 1}/{len(urls)} pages...", flush=True)
+                
+    print(f"\nCrawling complete. Successfully scraped {success_count} of {len(urls)} URLs.")
     
     if not scraped_records:
         print("Error: No records parsed. Exiting.", file=sys.stderr)
@@ -222,7 +213,7 @@ def main():
     for rec in scraped_records:
         seq_key = f"{rec['sequence_fwd']}_{rec['sequence_rev']}"
         if seq_key in existing_seqs:
-            print(f"  Skipping duplicate sequence pair for Gene {rec['gene_name']} (already in DB).")
+            pass # Skip duplicates silently to avoid log spamming
         else:
             new_records.append(rec)
             
@@ -235,14 +226,14 @@ def main():
     
     df_updated = pd.concat([df_db, df_new], ignore_index=True)
     df_updated.to_csv(db_path, index=False)
-    print(f"\nAppended {len(new_records)} new OriGene records to: {db_path}")
+    print(f"\nAppended {len(new_records)} new unique OriGene records to: {db_path}")
     print(f"New Database Size: N={len(df_updated)} records.")
     
     # 4. Trigger dataset audit to compute biophysical features and update statistics report
     print("\nTriggering dataset audit backfilling and stats regeneration...", flush=True)
     os.system("python dataset_audit.py")
     
-    print("\nOriGene Bulk Integration Complete!")
+    print("\nOriGene Ingestion Completed Successfully!")
     print("="*60)
 
 if __name__ == "__main__":
